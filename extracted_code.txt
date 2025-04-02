@@ -1,0 +1,113 @@
+//
+//  CForgeApp.swift
+//  CForge
+//
+//  Created by Sandesh Raj on 29/03/25.
+//
+
+import SwiftUI
+
+@main
+struct CForgeApp: App {
+    @State private var showSplash = true
+    
+    var body: some Scene {
+        WindowGroup {
+            if showSplash {
+                SplashView(onComplete: {})
+                    .onAppear {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                            withAnimation {
+                                showSplash = false
+                            }
+                        }
+                    }
+            } else {
+                ContentView()
+            }
+        }
+    }
+}
+//
+//  SplashView.swift
+//  CForge
+//
+//  Created by Sandesh Raj on 29/03/25.
+//
+
+import SwiftUI
+
+struct SplashView: View {
+    @State private var scale = 0.7
+    @State private var opacity = 0.5
+    let onComplete: () -> Void
+    
+    var body: some View {
+        ZStack {
+            Theme.background
+            
+            VStack {
+                Image(systemName: "bolt.fill")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 100, height: 100)
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [.blue, .indigo],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .symbolEffect(.pulse, options: .repeating)
+                
+                Text("CForge")
+                    .font(.system(size: 32, weight: .bold, design: .rounded))
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [.primary, .blue],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .padding(.top, 16)
+            }
+            .scaleEffect(scale)
+            .opacity(opacity)
+        }
+        .ignoresSafeArea()
+        .onAppear {
+            withAnimation(.easeIn(duration: 1.2)) {
+                scale = 1
+                opacity = 1
+            }
+            
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                withAnimation {
+                    onComplete()
+                }
+            }
+        }
+    }
+}
+
+
+#Preview {
+    SplashView(onComplete: {})
+        
+}
+//
+//  Theme.swift
+//  CForge
+//
+//  Created by Sandesh Raj on 29/03/25.
+//
+import SwiftUI
+import Foundation
+enum Theme {
+    static let background = Color(.systemBackground)
+    static let secondaryBackground = Color(.secondarySystemBackground)
+    static let text = Color(.label)
+    static let secondaryText = Color(.secondaryLabel)
+    static let accent = Color.blue
+    static let premiumAccent = Color.indigo 
+}

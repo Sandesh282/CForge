@@ -1,0 +1,1790 @@
+
+// MARK: - SplashView.swift
+// ==================================================
+
+//
+//  SplashView.swift
+//  CForge
+//
+//  Created by Sandesh Raj on 29/03/25.
+//
+
+import SwiftUI
+
+struct SplashView: View {
+    @State private var scale = 0.7
+    @State private var opacity = 0.5
+    let onComplete: () -> Void
+    
+    var body: some View {
+        ZStack {
+            Theme.background
+            
+            VStack {
+                Image(systemName: "bolt.fill")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 100, height: 100)
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [.blue, .indigo],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .symbolEffect(.pulse, options: .repeating)
+                
+                Text("CForge")
+                    .font(.system(size: 32, weight: .bold, design: .rounded))
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [.primary, .blue],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .padding(.top, 16)
+            }
+            .scaleEffect(scale)
+            .opacity(opacity)
+        }
+        .ignoresSafeArea()
+        .onAppear {
+            withAnimation(.easeIn(duration: 1.2)) {
+                scale = 1
+                opacity = 1
+            }
+            
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                withAnimation {
+                    onComplete()
+                }
+            }
+        }
+    }
+}
+
+
+#Preview {
+    SplashView(onComplete: {})
+        
+}
+
+
+// MARK: - CForgeApp.swift
+// ==================================================
+
+//
+//  CForgeApp.swift
+//  CForge
+//
+//  Created by Sandesh Raj on 29/03/25.
+//
+
+import SwiftUI
+
+@main
+struct CForgeApp: App {
+    @State private var showSplash = true
+    
+    var body: some Scene {
+        WindowGroup {
+            if showSplash {
+                SplashView(onComplete: {})
+                    .onAppear {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                            withAnimation {
+                                showSplash = false
+                            }
+                        }
+                    }
+            } else {
+                ContentView()
+            }
+        }
+    }
+}
+
+
+// MARK: - Theme.swift
+// ==================================================
+
+//
+//  Theme.swift
+//  CForge
+//
+//  Created by Sandesh Raj on 29/03/25.
+//
+import SwiftUI
+import Foundation
+enum Theme {
+    static let background = Color(.systemBackground)
+    static let secondaryBackground = Color(.secondarySystemBackground)
+    static let text = Color(.label)
+    static let secondaryText = Color(.secondaryLabel)
+    static let accent = Color.blue
+    static let premiumAccent = Color.indigo 
+}
+
+
+// MARK: - Models/CFContest.swift
+// ==================================================
+
+//
+//  CFContest.swift
+//  CForge
+//
+//  Created by Sandesh Raj on 29/03/25.
+//
+
+import SwiftUI
+import Foundation
+
+struct CFContest: Identifiable {
+    let id = UUID()
+    let name: String
+    let isRated: Bool
+    let startTime: Date
+    let duration: TimeInterval
+    
+    var timeRemaining: TimeInterval {
+        max(0, startTime.timeIntervalSinceNow)
+    }
+    
+    static let sampleData: [CFContest] = [
+        CFContest(name: "Codeforces Round #999",
+                 isRated: true,
+                 startTime: Date().addingTimeInterval(86400),
+                 duration: 9000),
+        CFContest(name: "Educational Round 120",
+                 isRated: true,
+                 startTime: Date().addingTimeInterval(172800),
+                 duration: 7200)
+    ]
+}
+
+
+// MARK: - Models/CFProblem.swift
+// ==================================================
+
+//
+//  CFProblem.swift
+//  CForge
+//
+//  Created by Sandesh Raj on 29/03/25.
+//
+import Foundation
+
+struct CFProblem: Identifiable {
+    let id = UUID()
+    let title: String
+    let rating: Int
+    let tags: [String]
+    let solvedCount: Int
+    let timeLimit: String
+    let memoryLimit: String
+    
+    static let sampleData: [CFProblem] = [
+        CFProblem(title: "A. Beautiful Matrix",
+                 rating: 800,
+                 tags: ["implementation"],
+                 solvedCount: 25431,
+                 timeLimit: "2 seconds",
+                 memoryLimit: "256 MB"),
+        CFProblem(title: "B. Prime Number",
+                 rating: 1100,
+                 tags: ["math", "number theory"],
+                 solvedCount: 18452,
+                 timeLimit: "1 second",
+                 memoryLimit: "512 MB")
+    ]
+}
+
+
+// MARK: - Models/CFUser.swift
+// ==================================================
+
+//
+//  CFUser.swift
+//  CForge
+//
+//  Created by Sandesh Raj on 30/03/25.
+//
+
+import Foundation
+
+struct CFUser {
+    let handle: String
+    let rating: Int
+    let maxRating: Int
+    let rank: String
+    let contributions: Int
+    let solvedProblems: Int
+    
+    static let sampleData = CFUser(
+        handle: "tourist",
+        rating: 3828,
+        maxRating: 3979,
+        rank: "Legendary Grandmaster",
+        contributions: 214,
+        solvedProblems: 6543
+    )
+}
+
+
+// MARK: - Models/API/APIError.swift
+// ==================================================
+
+//
+//  APIError.swift
+//  CForge
+//
+//  Created by Sandesh Raj on 30/03/25.
+//
+//enum APIError: Error, LocalizedError {
+//    case invalidURL
+//    case requestFailed(description: String)
+//    case invalidResponse
+//    case decodingFailed(description: String)
+//    case rateLimitExceeded
+//    case noData
+//    
+//    var errorDescription: String? {
+//        switch self {
+//        case .invalidURL: return "Invalid URL"
+//        case .requestFailed(let desc): return "Request failed: \(desc)"
+//        case .invalidResponse: return "Invalid response from server"
+//        case .decodingFailed(let desc): return "Decoding error: \(desc)"
+//        case .rateLimitExceeded: return "API rate limit exceeded"
+//        case .noData: return "No data received"
+//        }
+//    }
+//}
+
+
+// MARK: - Models/API/CodeforcesService.swift
+// ==================================================
+
+//
+//  CodeforcesService.swift
+//  CForge
+//
+//  Created by Sandesh Raj on 30/03/25.
+//
+
+import Foundation
+
+enum CodeforcesAPIError: Error {
+    case invalidURL
+    case noData
+    case decodingError
+    case apiError(String)
+}
+
+class CodeforcesService {
+    static let shared = CodeforcesService()
+    private let baseURL = "https://codeforces.com/api/"
+    
+    private init() {}
+    
+    // MARK: - Contest Methods
+    
+    func fetchContests(completion: @escaping (Result<[CFContest], CodeforcesAPIError>) -> Void) {
+        let urlString = "\(baseURL)contest.list?gym=false"
+        
+        guard let url = URL(string: urlString) else {
+            completion(.failure(.invalidURL))
+            return
+        }
+        
+        URLSession.shared.dataTask(with: url) { data, response, error in
+            if let error = error {
+                completion(.failure(.apiError(error.localizedDescription)))
+                return
+            }
+            
+            guard let data = data else {
+                completion(.failure(.noData))
+                return
+            }
+            
+            do {
+                let response = try JSONDecoder().decode(CodeforcesContestResponse.self, from: data)
+                if response.status == "OK" {
+                    let contests = response.result
+                        .filter { $0.phase == "BEFORE" || $0.phase == "CODING" }
+                        .map { contest in
+                            CFContest(
+                                name: contest.name,
+                                isRated: contest.type.lowercased().contains("rated"),
+                                startTime: Date(timeIntervalSince1970: contest.startTimeSeconds),
+                                duration: TimeInterval(contest.durationSeconds)
+                            )
+                        }
+                    completion(.success(contests))
+                } else {
+                    completion(.failure(.apiError(response.comment ?? "Unknown error")))
+                }
+            } catch {
+                completion(.failure(.decodingError))
+            }
+        }.resume()
+    }
+    
+    // MARK: - Problem Methods
+    
+    func fetchProblems(completion: @escaping (Result<[CFProblem], CodeforcesAPIError>) -> Void) {
+        let urlString = "\(baseURL)problemset.problems"
+        
+        guard let url = URL(string: urlString) else {
+            completion(.failure(.invalidURL))
+            return
+        }
+        
+        URLSession.shared.dataTask(with: url) { data, response, error in
+            if let error = error {
+                completion(.failure(.apiError(error.localizedDescription)))
+                return
+            }
+            
+            guard let data = data else {
+                completion(.failure(.noData))
+                return
+            }
+            
+            do {
+                let response = try JSONDecoder().decode(CodeforcesProblemResponse.self, from: data)
+                if response.status == "OK" {
+                    let problems = response.result.problems.map { problem in
+                        let stats = response.result.problemStatistics.first { $0.contestId == problem.contestId && $0.index == problem.index }
+                        
+                        return CFProblem(
+                            title: "\(problem.contestId)\(problem.index). \(problem.name)",
+                            rating: problem.rating ?? 0,
+                            tags: problem.tags,
+                            solvedCount: stats?.solvedCount ?? 0,
+                            timeLimit: "\(problem.timeLimitSeconds) seconds",
+                            memoryLimit: "\(problem.memoryLimit / 1024) MB"
+                        )
+                    }
+                    completion(.success(problems))
+                } else {
+                    completion(.failure(.apiError(response.comment ?? "Unknown error")))
+                }
+            } catch {
+                completion(.failure(.decodingError))
+            }
+        }.resume()
+    }
+    
+    // MARK: - User Methods
+    
+    func fetchUserInfo(handle: String, completion: @escaping (Result<CFUser, CodeforcesAPIError>) -> Void) {
+        let urlString = "\(baseURL)user.info?handles=\(handle)"
+        
+        guard let url = URL(string: urlString) else {
+            completion(.failure(.invalidURL))
+            return
+        }
+        
+        URLSession.shared.dataTask(with: url) { data, response, error in
+            if let error = error {
+                completion(.failure(.apiError(error.localizedDescription)))
+                return
+            }
+            
+            guard let data = data else {
+                completion(.failure(.noData))
+                return
+            }
+            
+            do {
+                let response = try JSONDecoder().decode(CodeforcesUserResponse.self, from: data)
+                if response.status == "OK", let user = response.result.first {
+                    let cfUser = CFUser(
+                        handle: user.handle,
+                        rating: user.rating ?? 0,
+                        maxRating: user.maxRating ?? 0,
+                        rank: user.rank ?? "Unrated",
+                        contributions: user.contribution ?? 0,
+                        solvedProblems: 0 // Will need separate API call for this
+                    )
+                    completion(.success(cfUser))
+                } else {
+                    completion(.failure(.apiError(response.comment ?? "Unknown error")))
+                }
+            } catch {
+                completion(.failure(.decodingError))
+            }
+        }.resume()
+    }
+}
+
+// MARK: - Response Models
+
+private struct CodeforcesContestResponse: Codable {
+    let status: String
+    let result: [CodeforcesContest]
+    let comment: String?
+}
+
+private struct CodeforcesContest: Codable {
+    let id: Int
+    let name: String
+    let type: String
+    let phase: String
+    let durationSeconds: Int
+    let startTimeSeconds: TimeInterval
+}
+
+private struct CodeforcesProblemResponse: Codable {
+    let status: String
+    let result: CodeforcesProblemSet
+    let comment: String?
+}
+
+private struct CodeforcesProblemSet: Codable {
+    let problems: [CodeforcesProblem]
+    let problemStatistics: [CodeforcesProblemStatistics]
+    
+    enum CodingKeys: String, CodingKey {
+        case problems
+        case problemStatistics = "problemStatistics"
+    }
+}
+
+private struct CodeforcesProblem: Codable {
+    let contestId: Int
+    let index: String
+    let name: String
+    let rating: Int?
+    let tags: [String]
+    let timeLimitSeconds: Int
+    let memoryLimit: Int // In bytes
+}
+
+private struct CodeforcesProblemStatistics: Codable {
+    let contestId: Int
+    let index: String
+    let solvedCount: Int
+}
+
+private struct CodeforcesUserResponse: Codable {
+    let status: String
+    let result: [CodeforcesUser]
+    let comment: String?
+}
+
+private struct CodeforcesUser: Codable {
+    let handle: String
+    let rating: Int?
+    let maxRating: Int?
+    let rank: String?
+    let contribution: Int?
+}
+
+
+// MARK: - Models/API/Utilities/NetworkUtility.swift
+// ==================================================
+
+//
+//  NetworkUtility.swift
+//  CForge
+//
+//  Created by Sandesh Raj on 30/03/25.
+//
+
+
+
+// MARK: - Models/API/ResponseModels/UserResponse.swift
+// ==================================================
+
+//
+//  UserResponse.swift
+//  CForge
+//
+//  Created by Sandesh Raj on 30/03/25.
+//
+
+
+
+// MARK: - Models/API/ResponseModels/ProblemResponse.swift
+// ==================================================
+
+//
+//  ProblemResponse.swift
+//  CForge
+//
+//  Created by Sandesh Raj on 30/03/25.
+//
+
+struct ProblemResponse: Codable {
+    let status: String
+    let result: ProblemSet
+    let comment: String?
+}
+
+struct ProblemSet: Codable {
+    let problems: [Problem]
+    let problemStatistics: [ProblemStatistics]
+    
+    enum CodingKeys: String, CodingKey {
+        case problems
+        case problemStatistics = "problemStatistics"
+    }
+}
+
+struct Problem: Codable {
+    let contestId: Int
+    let index: String
+    let name: String
+    let rating: Int?
+    let tags: [String]
+    let timeLimitSeconds: Int
+    let memoryLimit: Int // In bytes
+}
+
+struct ProblemStatistics: Codable {
+    let contestId: Int
+    let index: String
+    let solvedCount: Int
+}
+
+
+// MARK: - Models/API/ResponseModels/ContestResponse.swift
+// ==================================================
+
+//
+//  ContestResponse.swift
+//  CForge
+//
+//  Created by Sandesh Raj on 30/03/25.
+//
+import Foundation
+
+struct CodeforcesContest: Codable {
+    let id: Int
+    let name: String
+    let type: String
+    let phase: String
+    let durationSeconds: Int
+    let startTimeSeconds: TimeInterval
+}
+
+
+// MARK: - Utilities/Constants.swift
+// ==================================================
+
+//
+//  Constants.swift
+//  CForge
+//
+//  Created by Sandesh Raj on 30/03/25.
+//
+
+enum Constants {
+    static let codeforcesBaseURL = "https://codeforces.com/api/"
+    static let maxAPIRetryAttempts = 3
+    static let apiRateLimitDelay = 0.2 // seconds
+}
+
+
+// MARK: - Utilities/Extension/String+Extensions.swift
+// ==================================================
+
+//
+//  String+Extensions.swift
+//  CForge
+//
+//  Created by Sandesh Raj on 30/03/25.
+//
+
+
+
+// MARK: - Utilities/Extension/Date+Extensions.swift
+// ==================================================
+
+//
+//  Date+Extensions.swift
+//  CForge
+//
+//  Created by Sandesh Raj on 30/03/25.
+//
+
+import SwiftUI
+
+extension Date {
+    static func fromCodeforcesTimestamp(_ timestamp: TimeInterval) -> Date {
+        Date(timeIntervalSince1970: timestamp)
+    }
+    
+    func timeRemainingString() -> String {
+        let formatter = DateComponentsFormatter()
+        formatter.allowedUnits = [.day, .hour, .minute]
+        formatter.unitsStyle = .abbreviated
+        return formatter.string(from: max(0, timeIntervalSinceNow)) ?? "N/A"
+    }
+}
+
+
+
+// MARK: - Views/ContestComponent.swift
+// ==================================================
+
+//
+//  ContestComponent.swift
+//  CForge
+//
+//  Created by Sandesh Raj on 29/03/25.
+//
+
+import SwiftUI
+
+struct ContestComponent: View {
+    var body: some View {
+        Text(/*@START_MENU_TOKEN@*/"Hello, World!"/*@END_MENU_TOKEN@*/)
+    }
+}
+
+#Preview {
+    ContestComponent()
+}
+
+
+// MARK: - Views/ContestCard.swift
+// ==================================================
+
+import SwiftUI
+
+struct ContestCard: View {
+    
+    @State private var timeRemaining: TimeInterval = 86400
+    @State private var isRegistering = false
+    @State private var timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+    
+    let contest: Contest = Contest(
+        name: "Codeforces Round #999",
+        isRated: true,
+        startTime: Date().addingTimeInterval(86400),
+        duration: 9000
+    )
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Image(systemName: "c.circle.fill")
+                    .foregroundColor(.orange)
+                
+                Text(contest.name)
+                    .font(.headline)
+                
+                Spacer()
+                
+                Image(systemName: "chevron.right")
+                    .foregroundColor(.gray)
+            }
+            
+            HStack {
+                Image(systemName: "clock")
+                Text(timeString(time: timeRemaining))
+                    .font(.system(.subheadline, design: .monospaced))
+                    .onReceive(timer) { _ in
+                        if timeRemaining > 0 {
+                            timeRemaining -= 1
+                        } else {
+                            timer.upstream.connect().cancel()
+                        }
+                    }
+            }
+            .foregroundColor(timeRemaining < 3600 ? .red : .secondary)
+            
+            Divider()
+            
+            HStack {
+
+                if contest.isRated {
+                    Capsule()
+                        .fill(Color.orange.opacity(0.2))
+                        .frame(width: 80, height: 24)
+                        .overlay(
+                            Text("Rated")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundColor(.orange)
+                        )
+                }
+                
+                Spacer()
+                
+                Button(action: registerAction) {
+                    HStack(spacing: 6) {
+                        if isRegistering {
+                            ProgressView()
+                                .tint(.white)
+                        }
+                        Text(isRegistering ? "Registering..." : "Register")
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(RegisterButtonStyle())
+            }
+        }
+        .padding()
+        .background(Color(.secondarySystemBackground))
+        .cornerRadius(12)
+    }
+    
+    private func registerAction() {
+        isRegistering = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            isRegistering = false
+        }
+    }
+    
+    private func timeString(time: TimeInterval) -> String {
+        let hours = Int(time) / 3600
+        let minutes = Int(time) / 60 % 60
+        let seconds = Int(time) % 60
+        return String(format: "%02d:%02d:%02d", hours, minutes, seconds)
+    }
+}
+
+struct RegisterButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 14, weight: .bold))
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .background(configuration.isPressed ? Color.blue.opacity(0.8) : Color.blue)
+            .foregroundColor(.white)
+            .cornerRadius(8)
+            .scaleEffect(configuration.isPressed ? 0.95 : 1)
+    }
+}
+
+
+struct Contest {
+    let name: String
+    let isRated: Bool
+    let startTime: Date
+    let duration: TimeInterval
+}
+
+// Preview
+#Preview {
+    ContestCard()
+        .padding()
+}
+
+
+// MARK: - Views/ConfettiView.swift
+// ==================================================
+
+//
+//  ConfettiView.swift
+//  CForge
+//
+//  Created by Sandesh Raj on 29/03/25.
+//
+
+import SwiftUI
+
+
+struct ConfettiView: UIViewRepresentable {
+    func makeUIView(context: Context) -> some UIView {
+        let view = UIView()
+        view.backgroundColor = .clear
+        return view
+    }
+    
+    func updateUIView(_ uiView: UIViewType, context: Context) {
+        let emitter = CAEmitterLayer()
+        emitter.emitterShape = .line
+        emitter.emitterPosition = CGPoint(x: uiView.bounds.width/2, y: 0)
+        emitter.emitterSize = CGSize(width: uiView.bounds.width, height: 1)
+        
+        let cell = CAEmitterCell()
+        cell.contents = UIImage(systemName: "star.fill")?.cgImage
+        cell.birthRate = 20
+        cell.lifetime = 5
+        cell.velocity = 100
+        cell.scale = 0.1
+        cell.spin = 2
+        cell.emissionRange = .pi
+        
+        emitter.emitterCells = [cell]
+        uiView.layer.addSublayer(emitter)
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            emitter.removeFromSuperlayer()
+        }
+    }
+}
+#Preview {
+    ConfettiView()
+}
+
+
+// MARK: - Views/ContentView.swift
+// ==================================================
+
+//
+//  ContentView.swift
+//  CForge
+//
+//  Created by Sandesh Raj on 29/03/25.
+//
+
+import SwiftUI
+
+struct ContentView: View {
+    var body: some View {
+        TabView {
+                    ContestListView()
+                        .tabItem {
+                            Label("Contests", systemImage: "list.bullet")
+                        }
+
+                    ProblemListView()
+                        .tabItem {
+                            Label("Problems", systemImage: "doc.text")
+                        }
+
+                    ProfileView()
+                        .tabItem {
+                            Label("Profile", systemImage: "person.crop.circle")
+                        }
+                }
+    }
+}
+
+#Preview {
+    ContentView()
+}
+
+
+// MARK: - Views/Problem/ProblemRow.swift
+// ==================================================
+
+//
+//  ProblemRow.swift
+//  CForge
+//
+//  Created by Sandesh Raj on 29/03/25.
+//
+
+import SwiftUI
+import Foundation
+import SwiftUIFlowLayout
+
+struct ProblemRow: View {
+    let problem: CFProblem
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text(problem.title)
+                    .font(.headline)
+                
+                Spacer()
+                
+                DifficultyIndicator(rating: problem.rating)
+            }
+            
+            TagCloudView(tags: problem.tags)
+            
+            HStack(spacing: 20) {
+                Label("\(problem.solvedCount) solves", systemImage: "person.fill.checkmark")
+                Label(problem.timeLimit, systemImage: "clock")
+                Label(problem.memoryLimit, systemImage: "memorychip")
+            }
+            .font(.caption)
+            .foregroundColor(.secondary)
+        }
+        .padding()
+        .background(Color(.secondarySystemBackground))
+        .cornerRadius(12)
+    }
+}
+
+struct DifficultyIndicator: View {
+    let rating: Int
+    
+    var color: Color {
+        switch rating {
+        case ..<1000: return .gray
+        case 1000..<1500: return .green
+        case 1500..<2000: return .blue
+        default: return .red
+        }
+    }
+    
+    var body: some View {
+        Text("\(rating)")
+            .font(.system(size: 12, weight: .bold))
+            .padding(6)
+            .background(color.opacity(0.2))
+            .foregroundColor(color)
+            .cornerRadius(4)
+    }
+}
+
+struct TagCloudView: View {
+    let tags: [String]
+    private let horizontalPadding: CGFloat = 10
+    private let verticalPadding: CGFloat = 6
+    private let spacing: CGFloat = 8
+    
+    var body: some View {
+        FlowLayout(mode: .scrollable,
+                 binding: .constant(false),
+                 items: tags,
+                 itemSpacing: spacing) { tag in
+            Text(tag)
+                .font(.system(size: 12, weight: .medium))
+                .padding(.horizontal, horizontalPadding)
+                .padding(.vertical, verticalPadding)
+                .background(Color.blue.opacity(0.1))
+                .foregroundColor(.blue)
+                .cornerRadius(12)
+                .fixedSize() 
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+#Preview {
+    ProblemRow(problem: CFProblem.sampleData[0])
+        .padding()
+}
+
+
+
+// MARK: - Views/Problem/ProblemListView.swift
+// ==================================================
+
+//
+//  ProblemListView.swift
+//  CForge
+//
+//  Created by Sandesh Raj on 29/03/25.
+//
+
+import SwiftUI
+
+struct ProblemListView: View {
+    @State private var problems = CFProblem.sampleData
+    @State private var searchText = ""
+    @State private var selectedTag: String?
+    @State private var isLoading = false
+    @State private var errorMessage: String?
+    @State private var showError = false
+    
+    var body: some View {
+        NavigationStack {
+                    Group {
+                        if problems.isEmpty && isLoading {
+                            ProgressView()
+                        } else {
+                            ScrollView {
+                                LazyVStack(spacing: 16) {
+                                    SearchBar(text: $searchText)
+                                        .padding(.horizontal)
+                                    
+                                    tagFilterBar
+                                        .padding(.bottom, 8)
+                                    
+                                    ForEach(filteredProblems) { problem in
+                                        ProblemRow(problem: problem)
+                                            .padding(.horizontal)
+                                    }
+                                }
+                                .padding(.vertical)
+                            }
+                        }
+                    }
+                    .navigationTitle("Problems")
+                    .background(Color(.systemGroupedBackground))
+                    .onAppear {
+                        Task {
+                            await loadProblems()
+                        }
+                    }
+                    .alert("Error", isPresented: $showError) {
+                        Button("OK") {}
+                    } message: {
+                        Text(errorMessage ?? "Unknown error occurred")
+                    }
+                }
+       
+    }
+    
+    private var tagFilterBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(Array(Set(problems.flatMap { $0.tags })), id: \.self) { tag in
+                    Button(action: {
+                        selectedTag = selectedTag == tag ? nil : tag
+                    }) {
+                        Text(tag.capitalized)
+                            .font(.caption)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(selectedTag == tag ? Color.blue : Color.gray.opacity(0.2))
+                            .foregroundColor(selectedTag == tag ? .white : .primary)
+                            .cornerRadius(12)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal)
+        }
+    }
+    
+    private var filteredProblems: [CFProblem] {
+        var result = problems
+        
+        if !searchText.isEmpty {
+            result = result.filter {
+                $0.title.localizedCaseInsensitiveContains(searchText)
+            }
+        }
+        
+        if let selectedTag {
+            result = result.filter { $0.tags.contains(selectedTag) }
+        }
+        
+        return result
+    }
+    private func loadProblems() async {
+        isLoading = true
+        do {
+            let result = try await CodeforcesService.shared.fetchProblems()
+            problems = result
+        } catch {
+            errorMessage = error.localizedDescription
+            showError = true
+        }
+        isLoading = false
+    }
+}
+#Preview {
+    ProblemListView()
+}
+
+
+// MARK: - Views/Common/SearchBar.swift
+// ==================================================
+
+//
+//  SearchBar.swift
+//  CForge
+//
+//  Created by Sandesh Raj on 29/03/25.
+//
+
+import SwiftUI
+
+struct SearchBar: View {
+    @Binding var text: String
+    
+    var body: some View {
+        HStack {
+            TextField("Search contests...", text: $text)
+                .padding(8)
+                .padding(.horizontal, 24)
+                .background(Color(.systemGray6))
+                .cornerRadius(8)
+                .overlay(
+                    HStack {
+                        Image(systemName: "magnifyingglass")
+                            .foregroundColor(.gray)
+                            .padding(.leading, 8)
+                        
+                        Spacer()
+                        
+                        if !text.isEmpty {
+                            Button(action: { text = "" }) {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundColor(.gray)
+                                    .padding(.trailing, 8)
+                            }
+                        }
+                    }
+                )
+        }
+    }
+}
+
+
+// MARK: - Views/Common/LoadingView.swift
+// ==================================================
+
+//
+//  LoadingView.swift
+//  CForge
+//
+//  Created by Sandesh Raj on 30/03/25.
+//
+
+import SwiftUI
+struct LoadingView: View {
+    var body: some View {
+        VStack {
+            ProgressView()
+                .progressViewStyle(CircularProgressViewStyle(tint: .blue))
+                .scaleEffect(1.5)
+            Text("Loading...")
+                .padding(.top, 8)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+#Preview {
+    LoadingView()
+}
+
+
+// MARK: - Views/Profile/ProfileView.swift
+// ==================================================
+
+//
+//  ProfileView.swift
+//  CForge
+//
+//  Created by Sandesh Raj on 29/03/25.
+//
+import SwiftUI
+import SDWebImageSwiftUI
+
+struct ProfileView: View {
+    let user = CFUser.sampleData
+    
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 20) {
+                headerSection
+                ratingSection
+                statsSection
+                recentActivitySection
+            }
+            .padding()
+        }
+        .navigationTitle("Profile")
+        .background(Color(.systemGroupedBackground))
+    }
+    
+    private var headerSection: some View {
+        HStack(spacing: 16) {
+            WebImage(url: URL(string: "https://userpic.codeforces.org/\(user.handle)/avatar.jpg"))
+                .resizable()
+                .scaledToFill()
+                .frame(width: 80, height: 80)
+                .clipShape(Circle())
+                .overlay(Circle().stroke(Color.blue, lineWidth: 2))
+            
+            VStack(alignment: .leading, spacing: 4) {
+                Text(user.handle)
+                    .font(.title.bold())
+                
+                Text(user.rank)
+                    .font(.headline)
+                    .foregroundColor(rankColor)
+                
+                Text("Contribution: \(user.contributions)")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+            }
+            
+            Spacer()
+        }
+    }
+    
+    private var rankColor: Color {
+        switch user.rank {
+        case let rank where rank.contains("Grandmaster"): return .red
+        case let rank where rank.contains("Master"): return .orange
+        case let rank where rank.contains("Candidate"): return .purple
+        case let rank where rank.contains("Expert"): return .blue
+        default: return .green
+        }
+    }
+    
+    private var ratingSection: some View {
+        VStack(spacing: 16) {
+            HStack {
+                Text("Rating")
+                    .font(.headline)
+                Spacer()
+                Text("\(user.rating)")
+                    .font(.title2.bold())
+                    .foregroundColor(rankColor)
+            }
+            
+            ProgressView(value: Double(user.rating), total: Double(user.maxRating)) {
+                Text("Progress to max rating")
+            } currentValueLabel: {
+                HStack {
+                    Text("\(user.rating)/\(user.maxRating)")
+                    Spacer()
+                    Text("\(Int(Double(user.rating)/Double(user.maxRating)*100))%")
+                }
+            }
+        }
+        .padding()
+        .background(Color(.secondarySystemBackground))
+        .cornerRadius(12)
+    }
+    
+    private var statsSection: some View {
+        HStack(spacing: 16) {
+            StatCard(value: "\(user.solvedProblems)", label: "Solved")
+            StatCard(value: "1,234", label: "Attempted")
+            StatCard(value: "85%", label: "Accuracy")
+        }
+    }
+    
+    private var recentActivitySection: some View {
+        VStack(alignment: .leading) {
+            Text("Recent Activity")
+                .font(.headline)
+            
+            ForEach(0..<5, id: \.self) { _ in
+                HStack {
+                    Circle()
+                        .frame(width: 8, height: 8)
+                        .foregroundColor(.green)
+                    Text("Solved Problem 123A")
+                    Spacer()
+                    Text("2h ago")
+                        .foregroundColor(.secondary)
+                }
+                .padding(.vertical, 4)
+            }
+        }
+        .padding()
+        .background(Color(.secondarySystemBackground))
+        .cornerRadius(12)
+    }
+}
+
+struct StatCard: View {
+    let value: String
+    let label: String
+    
+    var body: some View {
+        VStack {
+            Text(value)
+                .font(.title2.bold())
+            Text(label)
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding()
+        .background(Color(.tertiarySystemBackground))
+        .cornerRadius(12)
+    }
+}
+
+#Preview {
+    NavigationStack {
+        ProfileView()
+    }
+}
+
+
+// MARK: - Views/Profile/LoginView.swift
+// ==================================================
+
+//
+//  LoginView.swift
+//  CForge
+//
+//  Created by Sandesh Raj on 30/03/25.
+//
+
+import SwiftUI
+
+struct LoginView: View {
+    @State private var handle = ""
+    @AppStorage("loggedInUser") private var loggedInUser: String?
+    
+    var body: some View {
+        NavigationStack {
+            VStack {
+                TextField("Codeforces Handle", text: $handle)
+                    .padding()
+                    .background(Color(.systemGray6))
+                    .cornerRadius(8)
+                
+                Button("Sign In") {
+                    Task {
+                        await loadUser()
+                    }
+                }
+                .padding()
+            }
+            .navigationTitle("Codeforces Login")
+        }
+    }
+    
+    private func loadUser() async {
+        do {
+            let user = try await CodeforcesService.shared.fetchUserInfo(handle: handle)
+            loggedInUser = handle
+            // Navigate to profile
+        } catch {
+            // Handle error
+        }
+    }
+}
+
+#Preview {
+    LoginView()
+}
+
+
+// MARK: - Views/Contest/ContestListView.swift
+// ==================================================
+
+import SwiftUI
+
+struct ContestListView: View {
+    // MARK: - State Properties
+    @State private var contests: [CFContest] = []
+    @State private var searchText: String = ""
+    @State private var isRefreshing: Bool = false
+    @State private var sortOption: SortOption = .date
+    @State private var errorMessage: String?
+    @State private var showError = false
+    
+    // MARK: - Main View
+    var body: some View {
+            NavigationStack {
+                Group {
+                    if contests.isEmpty && !isRefreshing {
+                        ProgressView()
+                            .onAppear {
+                                Task {
+                                    await loadContests()
+                                }
+                            }
+                    } else {
+                        contentView
+                    }
+                }
+                .navigationTitle("Contests")
+                .toolbar { sortToolbarItem }
+                .alert("Error", isPresented: $showError) {
+                    Button("OK") {}
+                } message: {
+                    Text(errorMessage ?? "Unknown error occurred")
+                }
+            }
+        }
+    
+    // MARK: - View Components
+    private var contentView: some View {
+        ZStack {
+            backgroundView
+            contestScrollView
+        }
+    }
+    
+    private var backgroundView: some View {
+        Color(.systemGroupedBackground)
+            .ignoresSafeArea()
+    }
+    
+    private var contestScrollView: some View {
+        ScrollView {
+            LazyVStack(spacing: 16) {
+                SearchBar(text: $searchText)
+                    .padding(.horizontal)
+                
+                contestListContent
+            }
+            .padding(.vertical)
+        }
+        .refreshable { await refreshContests() }
+    }
+    
+    private var contestListContent: some View {
+        ForEach(filteredAndSortedContests) { contest in
+            NavigationLink {
+                ContestDetailView()
+            } label: {
+                ContestRow(contest: contest)
+            }
+            .buttonStyle(ContestRowButtonStyle())
+            .padding(.horizontal)
+        }
+    }
+    
+    private var sortToolbarItem: some ToolbarContent {
+        ToolbarItem(placement: .topBarTrailing) {
+            Menu {
+                Picker("Sort By", selection: $sortOption) {
+                    Text("Date").tag(SortOption.date)
+                    Text("Name").tag(SortOption.name)
+                    Text("Rated Only").tag(SortOption.rated)
+                }
+            } label: {
+                Label("Sort", systemImage: "arrow.up.arrow.down.circle")
+            }
+        }
+    }
+    
+    // MARK: - Data Handling
+    private var filteredAndSortedContests: [CFContest] {
+        var result = searchText.isEmpty
+            ? contests
+            : contests.filter { $0.name.localizedCaseInsensitiveContains(searchText) }
+        
+        switch sortOption {
+        case .date: result.sort { $0.startTime < $1.startTime }
+        case .name: result.sort { $0.name < $1.name }
+        case .rated: result = result.filter { $0.isRated }
+        }
+        
+        return result
+    }
+    
+    private func loadContests() async {
+        contests = CFContest.sampleData
+    }
+    
+    
+    private func refreshContests() async {
+        isRefreshing = true
+        try? await Task.sleep(nanoseconds: 1_000_000_000)
+        contests = CFContest.sampleData // Simulate refresh
+        isRefreshing = false
+    }
+}
+
+// MARK: - Supporting Types
+enum SortOption: Hashable {
+    case date, name, rated
+}
+
+struct ContestRowButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.98 : 1)
+            .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
+    }
+}
+
+// MARK: - Preview
+#Preview {
+    ContestListView()
+        .environment(\.locale, Locale(identifier: "en_US"))
+}
+
+
+// MARK: - Views/Contest/ContestRow.swift
+// ==================================================
+
+import SwiftUI
+
+struct ContestRow: View {
+    let contest: CFContest
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+
+            HStack {
+                Image(systemName: contest.isRated ? "c.circle.fill" : "c.circle")
+                    .foregroundColor(contest.isRated ? .orange : .gray)
+                
+                Text(contest.name)
+                    .font(.headline)
+                
+                Spacer()
+                
+                Image(systemName: "chevron.right")
+                    .foregroundColor(.gray)
+            }
+
+            HStack {
+                Image(systemName: "clock")
+                Text(timeRemainingString)
+                    .font(.subheadline.monospacedDigit())
+            }
+            .foregroundColor(timeRemainingColor)
+            
+            Divider()
+            
+            HStack {
+                Capsule()
+                    .fill(contest.isRated ? Color.orange.opacity(0.2) : Color.gray.opacity(0.2))
+                    .frame(width: 80, height: 24)
+                    .overlay(
+                        Text(contest.isRated ? "Rated" : "Practice")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(contest.isRated ? .orange : .gray)
+                    )
+                
+                Spacer()
+                
+                Button("Register") {}
+                    .buttonStyle(RegisterButtonStyle())
+            }
+        }
+        .padding()
+        .background(Color(.secondarySystemBackground))
+        .cornerRadius(12)
+    }
+    
+    private var timeRemainingString: String {
+        let formatter = DateComponentsFormatter()
+        formatter.allowedUnits = [.day, .hour, .minute]
+        formatter.unitsStyle = .abbreviated
+        return formatter.string(from: contest.timeRemaining) ?? "N/A"
+    }
+    
+    private var timeRemainingColor: Color {
+        contest.timeRemaining < 3600 ? .red : .secondary
+    }
+}
+
+
+#Preview {
+    ContestRow(contest: CFContest(
+        name: "Codeforces Round #999",
+        isRated: true,
+        startTime: Date().addingTimeInterval(3600),
+        duration: 7200
+    ))
+    .padding()
+}
+
+
+// MARK: - Views/Contest/ContestDetailView.swift
+// ==================================================
+
+//
+//  ContestDetailView.swift
+//  CForge
+//
+//  Created by Sandesh Raj on 29/03/25.
+//
+
+import SwiftUI
+struct ContestDetailView: View {
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                
+                HeaderSection()
+                
+                
+                CountdownSection()
+                
+                Divider()
+                    .padding(.vertical, 8)
+                
+                
+                InfoSection()
+                
+                Divider()
+                    .padding(.vertical, 8)
+                
+                
+                ActionButtons()
+            }
+            .padding()
+        }
+        .navigationTitle("Contest Details")
+        .navigationBarTitleDisplayMode(.inline)
+        .background(Color(.systemGroupedBackground))
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button(action: shareContest) {
+                    Image(systemName: "square.and.arrow.up")
+                }
+            }
+        }
+    }
+    
+    private func shareContest() {
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        
+    }
+}
+
+// MARK: - Subviews
+private struct HeaderSection: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top) {
+                Image(systemName: "c.circle.fill")
+                    .font(.system(size: 40))
+                    .foregroundColor(.orange)
+                    .padding(.trailing, 8)
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Codeforces Round #999")
+                        .font(.title2.bold())
+                    
+                    HStack(spacing: 12) {
+                        Label("Div. 2", systemImage: "person.3.fill")
+                        Label("Rated", systemImage: "star.fill")
+                    }
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                }
+            }
+            
+            Capsule()
+                .fill(Color.green.opacity(0.2))
+                .frame(height: 28)
+                .overlay(
+                    HStack {
+                        Circle()
+                            .fill(Color.green)
+                            .frame(width: 10, height: 10)
+                        Text("Registration Open")
+                            .font(.subheadline.bold())
+                    }
+                    .padding(.horizontal, 10)
+                )
+                .padding(.top, 4)
+        }
+    }
+}
+
+private struct CountdownSection: View {
+    var body: some View {
+        VStack(spacing: 8) {
+            Text("Starts in")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+            
+            HStack(spacing: 6) {
+                TimeUnitView(value: "02", unit: "Days")
+                Text(":")
+                TimeUnitView(value: "12", unit: "Hours")
+                Text(":")
+                TimeUnitView(value: "45", unit: "Minutes")
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+}
+
+private struct TimeUnitView: View {
+    let value: String
+    let unit: String
+    
+    var body: some View {
+        VStack {
+            Text(value)
+                .font(.system(.title, design: .monospaced).bold())
+                .padding(8)
+                .background(Color(.secondarySystemBackground))
+                .cornerRadius(8)
+            
+            Text(unit)
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
+    }
+}
+
+private struct InfoSection: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            SectionHeader(title: "Contest Information")
+            
+            InfoRow(icon: "calendar", title: "Start Time", value: "May 30, 2023 • 12:00 UTC")
+            InfoRow(icon: "clock", title: "Duration", value: "2 hours 30 minutes")
+            InfoRow(icon: "person.2", title: "Participants", value: "12,345 registered")
+            InfoRow(icon: "checkmark.circle", title: "Registration", value: "Open until start")
+        }
+    }
+}
+
+private struct InfoRow: View {
+    let icon: String
+    let title: String
+    let value: String
+    
+    var body: some View {
+        HStack(alignment: .top) {
+            Image(systemName: icon)
+                .foregroundColor(.blue)
+                .frame(width: 24)
+            
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .foregroundColor(.secondary)
+                    .font(.subheadline)
+                
+                Text(value)
+                    .font(.body)
+            }
+            
+            Spacer()
+        }
+    }
+}
+
+private struct ActionButtons: View {
+    var body: some View {
+        VStack(spacing: 12) {
+            Button(action: registerAction) {
+                HStack {
+                    Spacer()
+                    Text("Register Now")
+                        .font(.headline)
+                    Spacer()
+                }
+                .padding()
+                .background(Color.blue)
+                .foregroundColor(.white)
+                .cornerRadius(10)
+            }
+            
+            Button(action: reminderAction) {
+                HStack {
+                    Spacer()
+                    Text("Set Reminder")
+                        .font(.headline)
+                    Spacer()
+                }
+                .padding()
+                .background(Color(.secondarySystemBackground))
+                .foregroundColor(.primary)
+                .cornerRadius(10)
+            }
+        }
+        .padding(.top, 8)
+    }
+    
+    private func registerAction() {
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+    }
+    
+    private func reminderAction() {
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    }
+}
+
+private struct SectionHeader: View {
+    let title: String
+    
+    var body: some View {
+        Text(title)
+            .font(.headline.bold())
+            .padding(.bottom, 4)
+    }
+}
+
+
+#Preview {
+    NavigationStack {
+        ContestDetailView()
+    }
+}
+

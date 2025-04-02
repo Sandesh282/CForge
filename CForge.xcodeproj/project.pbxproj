@@ -6,6 +6,11 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		C79E61942D9868BE0059E263 /* SDWebImageSwiftUI in Frameworks */ = {isa = PBXBuildFile; productRef = C79E61932D9868BE0059E263 /* SDWebImageSwiftUI */; };
+		C79E61A92D9874A70059E263 /* SwiftUIFlowLayout in Frameworks */ = {isa = PBXBuildFile; productRef = C79E61A82D9874A70059E263 /* SwiftUIFlowLayout */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		C79E61552D985D530059E263 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -52,6 +57,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C79E61A92D9874A70059E263 /* SwiftUIFlowLayout in Frameworks */,
+				C79E61942D9868BE0059E263 /* SDWebImageSwiftUI in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -112,6 +119,8 @@
 			);
 			name = CForge;
 			packageProductDependencies = (
+				C79E61932D9868BE0059E263 /* SDWebImageSwiftUI */,
+				C79E61A82D9874A70059E263 /* SwiftUIFlowLayout */,
 			);
 			productName = CForge;
 			productReference = C79E61442D985D510059E263 /* CForge.app */;
@@ -195,6 +204,10 @@
 			);
 			mainGroup = C79E613B2D985D510059E263;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				C79E61922D9868BE0059E263 /* XCRemoteSwiftPackageReference "SDWebImageSwiftUI" */,
+				C79E61A72D9874A70059E263 /* XCRemoteSwiftPackageReference "swiftui-flow-layout" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = C79E61452D985D510059E263 /* Products */;
 			projectDirPath = "";
@@ -396,6 +409,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"CForge/Preview Content\"";
+				DEVELOPMENT_TEAM = 64YTS3Y483;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -424,6 +438,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"CForge/Preview Content\"";
+				DEVELOPMENT_TEAM = 64YTS3Y483;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -552,6 +567,38 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		C79E61922D9868BE0059E263 /* XCRemoteSwiftPackageReference "SDWebImageSwiftUI" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/SDWebImage/SDWebImageSwiftUI.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 3.1.3;
+			};
+		};
+		C79E61A72D9874A70059E263 /* XCRemoteSwiftPackageReference "swiftui-flow-layout" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/globulus/swiftui-flow-layout";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.0.5;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		C79E61932D9868BE0059E263 /* SDWebImageSwiftUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C79E61922D9868BE0059E263 /* XCRemoteSwiftPackageReference "SDWebImageSwiftUI" */;
+			productName = SDWebImageSwiftUI;
+		};
+		C79E61A82D9874A70059E263 /* SwiftUIFlowLayout */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C79E61A72D9874A70059E263 /* XCRemoteSwiftPackageReference "swiftui-flow-layout" */;
+			productName = SwiftUIFlowLayout;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = C79E613C2D985D510059E263 /* Project object */;
 }
