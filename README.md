@@ -1,9 +1,68 @@
-# CForge
-CForge is a sleek SwiftUI-powered app that integrates with the Codeforces API, offering real-time access to contests, problems, and profiles. Stay updated with upcoming contests, browse problems with ratings and tags, and track user performance—all in a smooth, intuitive interface designed for competitive programmers. 
-Key Features:
-1. Contest Tracker 
-2. Problem Browser
-3. Profile Insights
-4. Smooth UI & Navigation 
+# CForge — Real-Time Codeforces Companion
 
-Whether you're preparing for a contest or tracking your progress, CForge makes competitive programming more accessible on iOS.
+CForge is a sleek **iOS** app for competitive programmers that delivers **live contests, problem browsing, and profile stats** straight from the **Codeforces REST API** — all in a polished **SwiftUI** experience.
+
+Whether you're prepping for your next competition or tracking your rank climb, CForge brings the Codeforces ecosystem to your fingertips.
+
+---
+
+## 📸 Screenshots
+
+| Home Screen | Contest List | Problem Browser | Profile Stats |
+|-------------|--------------|-----------------|---------------|
+| ![Home Screen](images/home.png) | ![Contest List](images/contests.png) | ![Problem Browser](images/problems.png) | ![Profile Stats](images/profile.png) |
+
+---
+
+## ✨ Features
+
+- 📅 **Live Contest Tracking** — Get a real-time list of upcoming and ongoing contests.  
+- 🔍 **Problem Explorer** — Browse, search, and filter problems by difficulty and tags.  
+- 📊 **Profile Insights** — Check user ratings, ranks, and historical trends.  
+- ⚡ **Smooth Animations** — SwiftUI + Combine for responsive and modern UI.
+
+---
+
+## 🛠 Tech Stack
+
+| Layer         | Tools & Technologies                                             |
+|---------------|------------------------------------------------------------------|
+| **UI**        | SwiftUI, Combine                                                 |
+| **Networking**| URLSession, JSONDecoder                                          |
+| **Image Loading** | SDWebImage                                                   |
+| **API**       | Codeforces REST API (`/contest.list`, `/user.info`, `/problemset.problems`) |
+| **IDE**       | Xcode                                                            |
+| **Platform**  | iOS                                                              |
+
+---
+
+## ⚙️ Installation
+
+1. Clone the repository:  
+   ```bash
+   git clone https://github.com/username/CForge.git
+   cd CForge
+    ```
+2. Open in Xcode:
+   ```bash
+   open CForge.xcodeproj
+   ```
+3. Run on simulator or a conneccted iOS device.
+
+## 🌐 API Reference
+CForge uses the Codeforces REST API.
+
+Endpoints in use:
+
+/contest.list — Fetches upcoming and ongoing contests.
+
+/user.info — Retrieves profile information and ratings.
+
+/problemset.problems — Provides the full problem set with tags and ratings.
+
+## Credits
+
+- **Codeforces REST API** — for contest, problemset, and profile data.  
+- **SwiftUI & Combine** — Apple frameworks for building modern UIs.  
+- **Xcode** — IDE used for development.
+
