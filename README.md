@@ -18,8 +18,9 @@ Whether you're prepping for your next competition or tracking your rank climb, C
 <img src="https://github.com/user-attachments/assets/285b0bf0-bdad-4e75-9b4f-5fb9a8ed0a6f" width="100%">
 </td>
 <td width="600" align="center"><b>🏆 Contest View</b><br>
-<img src="https://github.com/user-attachments/assets/CONTEST_VIEW_PLACEHOLDER" width="100%">
+<img src="https://github.com/user-attachments/assets/0c607454-80f7-4a16-942c-d84dfe0c4b2e" width="100%">
 </td>
+
 <td width="600" align="center"><b>📜 Problem List View</b><br>
 <img src="https://github.com/user-attachments/assets/468b3000-50dd-4390-88b4-b8ad5c2d0509" width="100%">
 </td>
