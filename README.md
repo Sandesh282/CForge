@@ -8,28 +8,30 @@ Whether you're prepping for your next competition or tracking your rank climb, C
 
 ## 📸 Screenshots
 
-
 <table>
 <tr>
 <td width="600" align="center"><b>⚡️ Splash Screen</b><br>
 <img src="https://github.com/user-attachments/assets/f52319d9-ab45-4cbf-82fb-f8c25af5ff27" width="100%">
 </td>
+
 <td width="600" align="center"><b>🏠 Home View</b><br>
 <img src="https://github.com/user-attachments/assets/285b0bf0-bdad-4e75-9b4f-5fb9a8ed0a6f" width="100%">
 </td>
+
 <td width="600" align="center"><b>🏆 Contest View</b><br>
 <img src="https://github.com/user-attachments/assets/0c607454-80f7-4a16-942c-d84dfe0c4b2e" width="100%">
 </td>
+</tr>
 
+<tr>
 <td width="600" align="center"><b>📜 Problem List View</b><br>
 <img src="https://github.com/user-attachments/assets/468b3000-50dd-4390-88b4-b8ad5c2d0509" width="100%">
 </td>
-</tr>
-<tr>
+
 <td width="600" align="center"><b>👤 Profile View</b><br>
 <img src="https://github.com/user-attachments/assets/3053cce3-d429-4db9-8e25-cb4cc3829f31" width="100%">
 </td>
-<td width="600"></td>
+
 <td width="600"></td>
 </tr>
 </table>
