@@ -371,7 +371,7 @@ extension ProblemListView {
                             .foregroundColor(.neonBlue)
                             .padding(8)
                             .background(
-                                LinearGradient(
+                                LinearGradient( 
                                     colors: [.neonBlue.opacity(0.2), .neonPurple.opacity(0.2)],
                                     startPoint: .leading,
                                     endPoint: .trailing
