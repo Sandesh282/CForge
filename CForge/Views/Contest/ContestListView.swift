@@ -4,99 +4,12 @@ import EventKitUI
 
 struct ContestListView: View {
     // MARK: - Models
-    struct CFContest: Identifiable, Codable {
-        let id: Int
-        let name: String
-        let type: String
-        let phase: String
-        let durationSeconds: Int
-        let startTimeSeconds: Int?
-        var registrationUrl: URL? {
-                URL(string: "https://codeforces.com/contestRegistration/\(id)")
-        }
-        
-        var contestUrl: URL? {
-            URL(string: "https://codeforces.com/contest/\(id)")
-        }
-        
-        var isRated: Bool {
-            return type.lowercased().contains("rated") || name.lowercased().contains("rated")
-        }
-        
-        var startTime: Date {
-            Date(timeIntervalSince1970: TimeInterval(startTimeSeconds ?? 0))
-        }
-        
-        var duration: String {
-            let hours = durationSeconds / 3600
-            let minutes = (durationSeconds % 3600) / 60
-            return "\(hours)h \(minutes)m"
-        }
-        var timeUntilStart: String {
-                let formatter = DateComponentsFormatter()
-                formatter.allowedUnits = [.day, .hour, .minute]
-                formatter.unitsStyle = .abbreviated
-                return formatter.string(from: Date(), to: startTime) ?? ""
-            }
-    }
-    
-    struct ContestResponse: Codable {
-        let status: String
-        let result: [CFContest]?
-        let comment: String?
-    }
-    struct SearchBar: View {
-        @Binding var text: String
-        var placeholder: String
-        
-        var body: some View {
-            HStack {
-                Image(systemName: "magnifyingglass")
-                    .foregroundColor(.neonBlue)
-                    .padding(.leading, 8)
-                TextField(placeholder, text: $text)
-                    .autocapitalization(.none)
-                    .disableAutocorrection(true)
-                    .foregroundColor(.textPrimary)
-                if !text.isEmpty {
-                                Button(action: { text = "" }) {
-                                    Image(systemName: "xmark.circle.fill")
-                                        .foregroundColor(.textSecondary)
-                                }
-                                .padding(.trailing, 8)
-                            }
-            }
-            .padding(8)
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color.darkerBackground)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(
-                                LinearGradient(
-                                    gradient: Gradient(colors: [
-                                        .neonBlue.opacity(0.4),
-                                        .neonPurple.opacity(0.4)
-                                    ]),
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                ),
-                                lineWidth: 1
-                            )
-                    )
-            )
-
-            .padding(.horizontal, 4)
-            .padding(.top, 8)
-            .cornerRadius(10)
-        }
-    }
     // MARK: - State
-    @State private var contests: [CFContest] = []
-    @State private var searchText = ""
-    @State private var isRefreshing = false
-    @State private var errorMessage: String?
-    @State private var showError = false
+    @State internal var contests: [CFContest] = []
+    @State internal var searchText = ""
+    @State internal var isRefreshing = false
+    @State internal var errorMessage: String?
+    @State internal var showError = false
     
     // MARK: - Main View
     var body: some View {
@@ -234,53 +147,6 @@ struct ContestListView: View {
                 configuration.title
             }
         }
-    }
-
-    private var filteredContests: [CFContest] {
-        contests
-            .filter { searchText.isEmpty || $0.name.localizedCaseInsensitiveContains(searchText) }
-            .sorted { $0.startTime < $1.startTime }
-    }
-    
-    // MARK: - Data Fetching
-    private func loadContests() async {
-        do {
-            contests = try await fetchContests()
-        } catch {
-            handleError(error)
-        }
-    }
-    
-    private func refreshContests() async {
-        isRefreshing = true
-        do {
-            contests = try await fetchContests()
-        } catch {
-            handleError(error)
-        }
-        isRefreshing = false
-    }
-    
-    private func fetchContests() async throws -> [CFContest] {
-        guard let url = URL(string: "https://codeforces.com/api/contest.list") else {
-            throw URLError(.badURL)
-        }
-        
-        let (data, _) = try await URLSession.shared.data(from: url)
-        let response = try JSONDecoder().decode(ContestResponse.self, from: data)
-        
-        guard response.status == "OK" else {
-            throw NSError(domain: "", code: 0, userInfo: [
-                NSLocalizedDescriptionKey: response.comment ?? "Unknown error"
-            ])
-        }
-        
-        return response.result?.filter { $0.phase == "BEFORE" } ?? []
-    }
-    
-    private func handleError(_ error: Error) {
-        errorMessage = error.localizedDescription
-        showError = true
     }
 }
 
