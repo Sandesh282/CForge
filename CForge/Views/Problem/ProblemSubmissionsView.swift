@@ -1,13 +1,11 @@
-
 import SwiftUI
 
 extension ProblemListView {
     struct ProblemSubmissionsView: View {
         let problem: Problem
         @EnvironmentObject var userManager: UserManager
-        @State private var submissions: [Submission] = []
-        @State private var isLoading = false
-        @State private var errorMessage: String?
+        @StateObject private var viewModel = ProblemSubmissionsViewModel()
+        
         var body: some View {
             VStack {
                 if userManager.userHandle.isEmpty {
@@ -16,88 +14,62 @@ extension ProblemListView {
                         systemImage: "person.crop.circle.badge.exclamationmark",
                         description: Text("Sign in to track your progress and see your past attempts.")
                     )
-                } else if isLoading {
-                    ProgressView("Fetching your attempts...")
-                        .tint(.neonBlue)
-                } else if let error = errorMessage {
-                    ContentUnavailableView(
-                        "Error Fetching Data",
-                        systemImage: "exclamationmark.triangle",
-                        description: Text(error)
-                    )
-                    Button("Retry") {
-                        Task { await loadSubmissions() }
-                    }
-                    .buttonStyle(.bordered)
-                } else if submissions.isEmpty {
-                    ContentUnavailableView(
-                        "No Attempts Yet",
-                        systemImage: "folder.badge.questionmark",
-                        description: Text("You haven't submitted any solutions for this problem yet. Give it a shot!")
-                    )
                 } else {
-                    ScrollView {
-                        LazyVStack(spacing: 12) {
-                            ForEach(submissions) { submission in
-                                SubmissionCard(submission: submission)
+                    switch viewModel.state {
+                    case .loading:
+                        ProgressView("Fetching your attempts...")
+                            .tint(.neonBlue)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            
+                    case .error(let message):
+                        VStack(spacing: 16) {
+                            ContentUnavailableView(
+                                "Error Fetching Data",
+                                systemImage: "exclamationmark.triangle",
+                                description: Text(message)
+                            )
+                            Button("Retry") {
+                                Task { await viewModel.loadSubmissions(contestId: problem.contestId, handle: userManager.userHandle) }
+                            }
+                            .buttonStyle(.bordered)
+                        }
+                        
+                    case .idle:
+                        Color.clear.onAppear {
+                            Task { await viewModel.loadSubmissions(contestId: problem.contestId, handle: userManager.userHandle) }
+                        }
+                        
+                    case .loaded(let allSubmissions):
+                        let problemSubmissions = allSubmissions.filter { $0.problem.index == problem.index }
+                        
+                        if problemSubmissions.isEmpty {
+                            ContentUnavailableView(
+                                "No Attempts Yet",
+                                systemImage: "folder.badge.questionmark",
+                                description: Text("You haven't submitted any solutions for this problem yet. Give it a shot!")
+                            )
+                        } else {
+                            ScrollView {
+                                LazyVStack(spacing: 12) {
+                                    ForEach(problemSubmissions) { submission in
+                                        SubmissionCard(submission: submission)
+                                    }
+                                }
+                                .padding()
+                            }
+                            .refreshable {
+                                await viewModel.loadSubmissions(contestId: problem.contestId, handle: userManager.userHandle)
                             }
                         }
-                        .padding()
-                    }
-                    .refreshable {
-                        await loadSubmissions()
                     }
                 }
             }
-            .task {
-                if !userManager.userHandle.isEmpty {
-                    await loadSubmissions()
+            .onChange(of: userManager.userHandle) { newHandle in
+                if !newHandle.isEmpty {
+                    Task { await viewModel.loadSubmissions(contestId: problem.contestId, handle: newHandle) }
                 }
             }
             .background(Color.darkBackground)
-        }
-        
-        private func loadSubmissions() async {
-            isLoading = true
-            errorMessage = nil
-            do {
-                
-                let handle = userManager.userHandle
-                let attempts = try await fetchUserSubmissions(contestId: problem.contestId, handle: handle)
-                
-                self.submissions = attempts.filter { $0.problem.index == problem.index }
-                
-            } catch {
-                errorMessage = error.localizedDescription
-            }
-            isLoading = false
-        }
-        
-        func fetchUserSubmissions(contestId: Int, handle: String) async throws -> [Submission] {
-            let urlString = "https://codeforces.com/api/contest.status?contestId=\(contestId)&handle=\(handle)&from=1&count=50"
-            guard let url = URL(string: urlString) else {
-                throw NSError(domain: "", code: 0, userInfo: [NSLocalizedDescriptionKey: "Invalid URL"])
-            }
-            
-            var request = URLRequest(url: url)
-            request.timeoutInterval = 15
-            
-            let (data, response) = try await URLSession.shared.data(for: request)
-            
-            guard let httpResponse = response as? HTTPURLResponse,
-                  (200...299).contains(httpResponse.statusCode) else {
-                throw NSError(domain: "", code: 0, userInfo: [NSLocalizedDescriptionKey: "Bad server response"])
-            }
-            
-            let decodedResponse = try JSONDecoder().decode(ContestSubmissionsResponse.self, from: data)
-            
-            guard decodedResponse.status == "OK" else {
-                 throw NSError(domain: "", code: 0, userInfo: [
-                    NSLocalizedDescriptionKey: "API Error: \(decodedResponse.comment ?? "Unknown error")"
-                ])
-            }
-            
-            return decodedResponse.result ?? []
         }
     }
     

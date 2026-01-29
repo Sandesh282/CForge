@@ -1,21 +1,9 @@
-//
-//  ProfileView.swift
-//  CForge
-//
-//  Created by Sandesh Raj on 29/03/25.
-//
-
 import SwiftUI
 import SDWebImageSwiftUI
-import CryptoKit
+
 import Charts
 
 
-struct Problem: Codable {
-    let contestId: Int
-    let index: String
-    let name: String
-}
 struct ProfileView: View {
     @State var profileData: CodeforcesUser?
     @State var errorMessage: String?

@@ -1,20 +1,9 @@
 import Foundation
 import SwiftUI
-import CryptoKit
+
 extension ProfileView{
     
     func fetchProfileData() {
-        let apiKey = "bbc54b409ba11d643f7df85ba269085450b7f2fc"
-        let secret = "5fadac371b0312989b5d285d8581acbefc627c15"
-        let methodName = "user.info"
-        let time = Int(Date().timeIntervalSince1970)
-        let rand = "123456"
-        
-        let paramString = "apiKey=\(apiKey)&handles=\(userHandle)&time=\(time)"
-        let hashInput = "\(rand)/\(methodName)?\(paramString)#\(secret)"
-        let hash = SHA512.hash(data: Data(hashInput.utf8)).map { String(format: "%02x", $0) }.joined()
-        let apiSig = "\(rand)\(hash)"
-        
         let urlString = "https://codeforces.com/api/user.info?handles=\(userHandle)"
         print("Fetching from: \(urlString)")
         
@@ -36,7 +25,7 @@ extension ProfileView{
                 }
                 
                 do {
-                    print("Raw JSON Response: ", String(data: data, encoding: .utf8) ?? "Invalid JSON")
+                    
                     let decodedResponse = try JSONDecoder().decode(CodeforcesProfileResponse.self, from: data)
                     if let userData = decodedResponse.result.first {
                         self.profileData = userData

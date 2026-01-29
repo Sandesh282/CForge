@@ -1,10 +1,3 @@
-//
-//  AnimatedGradient.swift
-//  CForge
-//
-//  Created by Sandesh Raj on 02/04/25.
-//
-
 import SwiftUI
 
 struct AnimatedGradientBackground: View {

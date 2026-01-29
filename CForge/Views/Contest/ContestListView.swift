@@ -3,15 +3,13 @@ import EventKit
 import EventKitUI
 
 struct ContestListView: View {
-    // MARK: - Models
-    // MARK: - State
+
     @State internal var contests: [CFContest] = []
     @State internal var searchText = ""
     @State internal var isRefreshing = false
     @State internal var errorMessage: String?
     @State internal var showError = false
     
-    // MARK: - Main View
     var body: some View {
         NavigationStack {
             Group {

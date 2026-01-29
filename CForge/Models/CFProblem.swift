@@ -1,9 +1,3 @@
-//
-//  CFProblem.swift
-//  CForge
-//
-//  Created by Sandesh Raj on 29/03/25.
-//
 import Foundation
 
 struct CFProblem: Identifiable {

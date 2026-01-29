@@ -1,10 +1,3 @@
-//
-//  LoadingView.swift
-//  CForge
-//
-//  Created by Sandesh Raj on 30/03/25.
-//
-
 import SwiftUI
 struct LoadingView: View {
     var body: some View {

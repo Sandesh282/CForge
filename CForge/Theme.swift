@@ -1,9 +1,3 @@
-//
-//  Theme.swift
-//  CForge
-//
-//  Created by Sandesh Raj on 29/03/25.
-//
 import SwiftUI
 import Foundation
 enum Theme {
