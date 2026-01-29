@@ -36,11 +36,3 @@ extension ProblemListView {
     }
 }
 
-extension ProblemListView.ProblemDetailView.DescriptionTab {
-    func htmlToPlainText(_ html: String) -> String {
-            
-            return html
-                .replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
-                .replacingOccurrences(of: "&[^;]+;", with: "", options: .regularExpression)
-        }
-}

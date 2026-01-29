@@ -20,23 +20,35 @@ struct ProblemListView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                LazyVStack(spacing: 16) {
-                    SearchBar(text: $searchText, placeholder: "Search by name or rating")
-                        .padding(.horizontal)
-                        .onChange(of: searchText) { _ in
-                                filterProblems()
-                            }
-                    
-                    tagFilterBar
-                        .padding(.bottom, 8)
-                    
-                    ForEach(filteredProblems) { problem in
-                        ProblemRow(problem: problem)  
+            ZStack {
+                if isLoading && allProblems.isEmpty {
+                    VStack {
+                        ProgressView()
+                            .scaleEffect(1.5)
+                            .tint(.neonBlue)
+                        Text("Loading Problems...")
+                            .font(.headline)
+                            .foregroundColor(.textSecondary)
+                            .padding(.top)
                     }
-                    .padding(.horizontal)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    ScrollView {
+                        LazyVStack(spacing: 16) {
+                            SearchBar(text: $searchText, placeholder: "Search by name or rating")
+                                .padding(.horizontal)
+                            
+                            tagFilterBar
+                                .padding(.bottom, 8)
+                            
+                            ForEach(filteredProblems) { problem in
+                                ProblemRow(problem: problem)
+                            }
+                            .padding(.horizontal)
+                        }
+                        .padding(.vertical)
+                    }
                 }
-                .padding(.vertical)
             }
             .navigationTitle("Problems")
             .navigationDestination(for: Problem.self) { problem in
@@ -52,30 +64,64 @@ struct ProblemListView: View {
                 )
                 .ignoresSafeArea()
             )
-                        .task { await loadProblems() }
-            
-        }
-    }
-    
-    
-    private var problemListView: some View {
-        ScrollView {
-            LazyVStack(spacing: 16) {
-                SearchBar(text: $searchText, placeholder: "Search by name or rating")
-                    .padding(.horizontal)
-                    .onChange(of: searchText) { filterProblems() }
-                
-                tagFilterBar
-                    .padding(.bottom, 8)
-                
-                ForEach(filteredProblems) { problem in
-                    ProblemRow(problem: problem)
-                        .padding(.horizontal)
-                }
+            .task { await loadProblems() }
+            .task(id: searchText) {
+                // Debounce search
+                do {
+                    try await Task.sleep(nanoseconds: 300_000_000) // 300ms
+                    filterProblems()
+                } catch {}
             }
-            .padding(.vertical)
+            .task(id: selectedTag) {
+                filterProblems()
+            }
         }
     }
+    
+    // ... existing code ...
+
+        // MARK: - Detail View Tabs
+        struct DescriptionTab: View {
+            let problem: Problem
+            
+            var body: some View {
+                WebView(url: URL(string: "https://codeforces.com/contest/\(problem.contestId)/problem/\(problem.index)")!)
+            }
+        }
+        
+        struct WebView: UIViewRepresentable {
+            let url: URL
+            
+            func makeUIView(context: Context) -> WKWebView {
+                let config = WKWebViewConfiguration()
+                let userContentController = WKUserContentController()
+                
+                // CSS to hide header, footer, sidebar, and other clutter
+                let css = """
+                    #header, .footer, .menu-box, .sidebar-menu, .roundbox-lt, .roundbox-rt, .roundbox-lb, .roundbox-rb, .second-level-menu, .userbox, .main-menu-list, .invitation-code-form, #topic-1 { display: none !important; }
+                    #pageContent { margin: 0 !important; width: 100% !important; padding: 10px !important; }
+                    .ttypography { font-size: 110% !important; }
+                    body { padding-top: 0 !important; background-color: #ffffff !important; }
+                """
+                
+                let js = """
+                    var style = document.createElement('style');
+                    style.innerHTML = `\(css)`;
+                    document.head.appendChild(style);
+                """
+                
+                let userScript = WKUserScript(source: js, injectionTime: .atDocumentEnd, forMainFrameOnly: true)
+                userContentController.addUserScript(userScript)
+                config.userContentController = userContentController
+                
+                return WKWebView(frame: .zero, configuration: config)
+            }
+            
+            func updateUIView(_ uiView: WKWebView, context: Context) {
+                let request = URLRequest(url: url)
+                uiView.load(request)
+            }
+        }
     
     private var tagFilterBar: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -304,10 +350,10 @@ extension ProblemListView {
                     DescriptionTab(problem: problem)
                         .tag(0)
                     
-                    SubmitTab(problem: problem)
+                    SubmitLauncherView(problem: problem)
                         .tag(1)
                     
-                    SubmissionsTab(problem: problem)
+                    ProblemSubmissionsView(problem: problem)
                         .tag(2)
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
@@ -325,299 +371,7 @@ extension ProblemListView {
         }
         
 
-        struct SubmitTab: View {
-            let problem: Problem
-            @State private var selectedFile: URL?
-            @State private var isFileImporterPresented = false
-            @State private var submissionStatus: SubmissionStatus?
-            @State private var selectedLanguage = "C++"
-            let languages = ["C++", "Java", "Python", "Rust"]
-            
-            var body: some View {
-                Form {
-                    Section {
-                        Picker("Language", selection: $selectedLanguage) {
-                            ForEach(languages, id: \.self) { language in
-                                Text(language)
-                            }
-                        }
-                        
-                        Button {
-                            isFileImporterPresented = true
-                        } label: {
-                            HStack {
-                                Image(systemName: "doc")
-                                Text(selectedFile?.lastPathComponent ?? "Select Solution File")
-                                Spacer()
-                                if selectedFile != nil {
-                                    Image(systemName: "checkmark.circle.fill")
-                                        .foregroundColor(.green)
-                                }
-                            }
-                        }
-                    }
-                    
-                    if let selectedFile {
-                        Section {
-                            Button("Submit Solution") {
-                                Task {
-                                    await submitSolution(file: selectedFile)
-                                }
-                            }
-                            .disabled(submissionStatus?.isInProgress == true)
-                        }
-                    }
-                    
-                    if let status = submissionStatus {
-                        Section {
-                            HStack {
-                                if status.isInProgress {
-                                    ProgressView()
-                                }
-                                Text(status.message)
-                                    .foregroundColor(status.color)
-                            }
-                        }
-                    }
-                }
-                .fileImporter(
-                    isPresented: $isFileImporterPresented,
-                    allowedContentTypes: [.plainText],
-                    allowsMultipleSelection: false
-                ) { result in
-                    if case .success(let files) = result {
-                        selectedFile = files.first
-                        submissionStatus = nil
-                    }
-                }
-            }
-            
-            private func submitSolution(file: URL) async {
-                submissionStatus = .submitting
-                // Simulate API call
-                try? await Task.sleep(nanoseconds: 2_000_000_000)
-                
-                let randomSuccess = Bool.random()
-                submissionStatus = randomSuccess ?
-                    .success(message: "Submitted successfully! ID: \(Int.random(in: 100000...999999))") :
-                    .failure(message: "Submission failed: Time limit exceeded")
-            }
-            
-            enum SubmissionStatus {
-                case submitting
-                case success(message: String)
-                case failure(message: String)
-                
-                var message: String {
-                    switch self {
-                    case .submitting: return "Submitting..."
-                    case .success(let message): return message
-                    case .failure(let message): return message
-                    }
-                }
-                
-                var color: Color {
-                    switch self {
-                    case .submitting: return .blue
-                    case .success: return .green
-                    case .failure: return .red
-                    }
-                }
-                
-                var isInProgress: Bool {
-                    if case .submitting = self { return true }
-                    return false
-                }
-            }
-        }
         
-        // MARK: - Detail View Tabs
-        struct DescriptionTab: View {
-            let problem: Problem
-            @State internal var problemStatement: String?
-            @State internal var isLoading = false
-            @State internal var errorMessage: String?
-            
-            var body: some View {
-                ScrollView {
-                    if isLoading {
-                        ProgressView()
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    } else if let error = errorMessage {
-                        VStack {
-                                ContentUnavailableView(
-                                    "Error Loading Problem",
-                                    systemImage: "exclamationmark.triangle",
-                                    description: Text(error)
-                                )
-                                Button("Retry") {
-                                    Task { await loadProblemStatement() }
-                                }
-                                .buttonStyle(.bordered)
-                            }
-
-                    } else if let statement = problemStatement {
-
-                        HTMLView(htmlContent: statement)
-                                           .frame(height: UIScreen.main.bounds.height)
-                                           .padding()
-                    } else {
-                        ContentUnavailableView(
-                            "No Problem Statement",
-                            systemImage: "doc.text.magnifyingglass",
-                            description: Text("Problem statement not available")
-                        )
-                    }
-                }
-                .task {
-                    await loadProblemStatement()
-                }
-
-            }
-            private var emptyView: some View {
-                    ContentUnavailableView(
-                        "No Problem Statement",
-                        systemImage: "doc.text.magnifyingglass",
-                        description: Text("Problem statement not available")
-                    )
-                }
-            private func errorView(error: String) -> some View {
-                    VStack {
-                        ContentUnavailableView(
-                            "Error Loading Problem",
-                            systemImage: "exclamationmark.triangle",
-                            description: Text(error)
-                        )
-                        Button("Retry") {
-                            Task { await loadProblemStatement() }
-                        }
-                        .buttonStyle(.bordered)
-                    }
-                }
-            struct HTMLView: UIViewRepresentable {
-                    let htmlContent: String
-                    
-                    func makeUIView(context: Context) -> WKWebView {
-                        return WKWebView()
-                    }
-                    
-                    func updateUIView(_ uiView: WKWebView, context: Context) {
-                        let header = """
-                        <head>
-                            <meta name="viewport" content="width=device-width, initial-scale=1">
-                            <style>
-                                body { font-family: -apple-system; font-size: 16px; }
-                                img { max-width: 100%; height: auto; }
-                            </style>
-                        </head>
-                        """
-                        uiView.loadHTMLString(header + htmlContent, baseURL: nil)
-                    }
-                }
-        }
-        
-        struct SubmissionsTab: View {
-            let problem: Problem
-            @State private var submissions: [Submission] = []
-            @State private var isLoading = false
-            
-            var body: some View {
-                Group {
-                    if isLoading {
-                        ProgressView()
-                    } else if submissions.isEmpty {
-                        ContentUnavailableView(
-                            "No Submissions",
-                            systemImage: "doc.text.magnifyingglass",
-                            description: Text("You haven't submitted any solutions yet")
-                        )
-                    } else {
-                        List(submissions) { submission in
-                            VStack(alignment: .leading, spacing: 4) {
-                                HStack {
-                                    Text(submission.verdict.rawValue)
-                                        .foregroundColor(submission.verdict.color)
-                                    Spacer()
-                                    Text(submission.time)
-                                        .foregroundColor(.secondary)
-                                        .font(.caption)
-                                }
-                                
-                                HStack {
-                                    Text("Test \(submission.passedTestCount)/\(submission.testCount)")
-                                        .font(.caption2)
-                                        .padding(4)
-                                        .background(Color.gray.opacity(0.2))
-                                        .cornerRadius(4)
-                                    
-                                    Text(submission.language)
-                                        .font(.caption2)
-                                        .foregroundColor(.secondary)
-                                }
-                            }
-                        }
-                        .listStyle(.plain)
-                        .refreshable {
-                            await loadSubmissions()
-                        }
-                    }
-                }
-                .task {
-                    await loadSubmissions()
-                }
-            }
-            
-            private func loadSubmissions() async {
-                isLoading = true
-                // Simulate API call
-                try? await Task.sleep(nanoseconds: 1_000_000_000)
-                
-                submissions = [
-                    Submission(
-                        id: 1,
-                        verdict: .accepted,
-                        time: "2 minutes ago",
-                        passedTestCount: 50,
-                        testCount: 50,
-                        language: "C++"
-                    ),
-                    Submission(
-                        id: 2,
-                        verdict: .wrongAnswer,
-                        time: "5 minutes ago",
-                        passedTestCount: 12,
-                        testCount: 50,
-                        language: "Python"
-                    )
-                ]
-                isLoading = false
-            }
-            
-            struct Submission: Identifiable {
-                let id: Int
-                let verdict: Verdict
-                let time: String
-                let passedTestCount: Int
-                let testCount: Int
-                let language: String
-                
-                enum Verdict: String {
-                    case accepted = "Accepted"
-                    case wrongAnswer = "Wrong Answer"
-                    case timeLimitExceeded = "Time Limit Exceeded"
-                    case compilationError = "Compilation Error"
-                    case runtimeError = "Runtime Error"
-                    
-                    var color: Color {
-                        switch self {
-                        case .accepted: return .green
-                        case .wrongAnswer, .compilationError, .runtimeError: return .red
-                        case .timeLimitExceeded: return .orange
-                        }
-                    }
-                }
-            }
-        }
     }
 }
 
@@ -661,80 +415,6 @@ struct SearchBar: View {
                         )
                 )
          .padding(.horizontal, 4)
-    }
-}
-class SubmissionStore: ObservableObject {
-    @Published var userSubmissions: [Submission] = []
-    
-    func addSubmission(_ submission: Submission) {
-        userSubmissions.append(submission)
-        saveSubmissions()
-    }
-    
-    func getSubmissions(forProblem problemId: String) -> [Submission] {
-        return userSubmissions
-            .filter { $0.problemId == problemId }
-            .sorted { $0.timestamp > $1.timestamp }
-    }
-    
-    private let saveKey = "userSubmissions"
-    
-    init() {
-        loadSubmissions()
-    }
-    
-    func loadSubmissions() {
-        if let data = UserDefaults.standard.data(forKey: saveKey) {
-            do {
-                userSubmissions = try JSONDecoder().decode([Submission].self, from: data)
-            } catch {
-                print("Error loading submissions: \(error)")
-            }
-        }
-    }
-    
-    func saveSubmissions() {
-        do {
-            let data = try JSONEncoder().encode(userSubmissions)
-            UserDefaults.standard.set(data, forKey: saveKey)
-        } catch {
-            print("Error saving submissions: \(error)")
-        }
-    }
-}
-struct Submission: Identifiable, Codable, Hashable {
-    let id = UUID()
-    let problemId: String
-    let verdict: Verdict
-    let time: String
-    let passedTestCount: Int
-    let testCount: Int
-    let language: String
-    let timestamp = Date()
-    
-    enum Verdict: String, Codable, CaseIterable {
-        case accepted = "Accepted"
-        case wrongAnswer = "Wrong Answer"
-        case timeLimitExceeded = "Time Limit Exceeded"
-        case runtimeError = "Runtime Error"
-        case compilationError = "Compilation Error"
-        case memoryLimitExceeded = "Memory Limit Exceeded"
-        case unknown = "Unknown"
-        
-        init(from decoder: Decoder) throws {
-            let container = try decoder.singleValueContainer()
-            let rawValue = try container.decode(String.self)
-            self = Verdict(rawValue: rawValue) ?? .unknown
-        }
-        
-        var color: Color {
-            switch self {
-            case .accepted: return .green
-            case .wrongAnswer, .compilationError, .runtimeError: return .red
-            case .timeLimitExceeded, .memoryLimitExceeded: return .orange
-            case .unknown: return .gray
-            }
-        }
     }
 }
 

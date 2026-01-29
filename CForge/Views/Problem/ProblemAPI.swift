@@ -77,45 +77,39 @@ extension ProblemListView {
             throw error
         }
     }
-}
-
-extension ProblemListView.ProblemDetailView.DescriptionTab {
-    func loadProblemStatement() async {
-        isLoading = true
-        errorMessage = nil
-        
-        do {
-            let statement = try await fetchProblemStatementFromAPI()
-            print("Fetched statement:", statement)
-            problemStatement = statement
-        } catch {
-            print("Error fetching problem:", error)
-            errorMessage = error.localizedDescription
-        }
-        
-        isLoading = false
-    }
-
-    func fetchProblemStatementFromAPI() async throws -> String {
-        let urlString = "https://codeforces.com/api/problemset.problem?contestId=\(problem.contestId)&index=\(problem.index)"
+    
+    func fetchContestSubmissions(contestId: Int, handle: String) async throws -> [Submission] {
+        let urlString = "https://codeforces.com/api/contest.status?contestId=\(contestId)&handle=\(handle)&from=1&count=100" // Fetch last 100 seems reasonable for a single contest
         guard let url = URL(string: urlString) else {
             throw NSError(domain: "", code: 0, userInfo: [NSLocalizedDescriptionKey: "Invalid URL"])
         }
-        print("Fetching from:", urlString)
-        let (data, _) = try await URLSession.shared.data(from: url)
-        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
         
-        print("Raw API response:", json ?? "No data")
-        
-        guard let result = json?["result"] as? [String: Any],
-              let problemData = result["problem"] as? [String: Any] else {
-            throw NSError(domain: "", code: 0, userInfo: [NSLocalizedDescriptionKey: "Invalid response format"])
+        do {
+            var request = URLRequest(url: url)
+            request.timeoutInterval = 15
+            
+            let (data, response) = try await URLSession.shared.data(for: request)
+            
+            guard let httpResponse = response as? HTTPURLResponse,
+                  (200...299).contains(httpResponse.statusCode) else {
+                throw NSError(domain: "", code: 0, userInfo: [NSLocalizedDescriptionKey: "Bad server response"])
+            }
+            
+            let decodedResponse = try JSONDecoder().decode(ContestSubmissionsResponse.self, from: data)
+            
+            guard decodedResponse.status == "OK" else {
+                throw NSError(domain: "", code: 0, userInfo: [
+                    NSLocalizedDescriptionKey: "API Error: \(decodedResponse.comment ?? "Unknown error")"
+                ])
+            }
+            
+            return decodedResponse.result ?? []
+            
+        } catch {
+            print("Fetch submissions error:", error.localizedDescription)
+            throw error
         }
-        
-        if let content = problemData["description"] as? String {
-            return content
-        }
-        
-        return "No problem statement available"
     }
+
 }
+
