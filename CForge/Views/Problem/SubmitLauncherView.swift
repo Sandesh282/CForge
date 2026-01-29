@@ -23,7 +23,6 @@ extension ProblemListView {
             VStack(spacing: 24) {
                 Spacer()
                 
-                // Context-only Language Display
                 HStack {
                     Text("Preferred language")
                         .foregroundColor(.textSecondary)
@@ -87,7 +86,6 @@ extension ProblemListView {
         }
         
         var submitURL: URL {
-            // https://codeforces.com/contest/{contestId}/submit?problemIndex={index}
             var components = URLComponents()
             components.scheme = "https"
             components.host = "codeforces.com"

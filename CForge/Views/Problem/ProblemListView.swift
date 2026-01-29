@@ -77,8 +77,7 @@ struct ProblemListView: View {
             }
         }
     }
-    
-    // ... existing code ...
+
 
         // MARK: - Detail View Tabs
         struct DescriptionTab: View {
@@ -96,7 +95,6 @@ struct ProblemListView: View {
                 let config = WKWebViewConfiguration()
                 let userContentController = WKUserContentController()
                 
-                // CSS to hide header, footer, sidebar, and other clutter
                 let css = """
                     #header, .footer, .menu-box, .sidebar-menu, .roundbox-lt, .roundbox-rt, .roundbox-lb, .roundbox-rb, .second-level-menu, .userbox, .main-menu-list, .invitation-code-form, #topic-1 { display: none !important; }
                     #pageContent { margin: 0 !important; width: 100% !important; padding: 10px !important; }
