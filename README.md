@@ -73,7 +73,15 @@ Whether you're prepping for your next competition or tracking your rank climb, C
    ```bash
    open CForge.xcodeproj
    ```
-3. Run on simulator or a conneccted iOS device.
+3. Update Signing & Capabilities:
+   - Select the **CForge** project in the Xcode navigator (the blue icon at the top).
+   - Select the **CForge** target under **TARGETS**.
+   - Go to the **Signing & Capabilities** tab.
+   - Check **Automatically manage signing**.
+   - Change the **Team** dropdown to your own Apple Developer account (a free Apple ID works).
+   - If needed, update the **Bundle Identifier** to something unique (e.g., `com.yourname.CForge`).
+
+4. Run on a simulator or a connected iOS device.
 
 ## 🌐 API Reference
 CForge uses the Codeforces REST API.
