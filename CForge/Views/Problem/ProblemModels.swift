@@ -76,7 +76,7 @@ struct Member: Codable {
 }
 
 enum Verdict: String, Codable {
-    case faled = "FAILED"
+    case failed = "FAILED"
     case ok = "OK"
     case partial = "PARTIAL"
     case compilationError = "COMPILATION_ERROR"
