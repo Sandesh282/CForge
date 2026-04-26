@@ -388,7 +388,7 @@ struct SearchBar: View {
                             .foregroundColor(.neonBlue)
                             .padding(.leading, 12)
 
-                        TextField("Search by name or rating", text: $text)
+                        TextField(placeholder, text: $text)
                             .foregroundColor(.textPrimary)
                             .autocapitalization(.none)
                             .textInputAutocapitalization(.never)
