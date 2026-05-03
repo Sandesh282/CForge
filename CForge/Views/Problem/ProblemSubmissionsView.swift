@@ -9,10 +9,10 @@ extension ProblemListView {
         var body: some View {
             VStack {
                 if userManager.userHandle.isEmpty {
-                    ContentUnavailableView(
-                        "Not Signed In",
-                        systemImage: "person.crop.circle.badge.exclamationmark",
-                        description: Text("Sign in to track your progress and see your past attempts.")
+                    EmptyStateView(
+                        icon: "person.crop.circle.badge.exclamationmark",
+                        title: "Not Signed In",
+                        subtitle: "Sign in to track your progress and see your past attempts."
                     )
                 } else {
                     switch viewModel.state {
@@ -22,17 +22,15 @@ extension ProblemListView {
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                             
                     case .error(let message):
-                        VStack(spacing: 16) {
-                            ContentUnavailableView(
-                                "Error Fetching Data",
-                                systemImage: "exclamationmark.triangle",
-                                description: Text(message)
-                            )
-                            Button("Retry") {
+                        EmptyStateView(
+                            icon: "exclamationmark.triangle",
+                            title: "Error Fetching Data",
+                            subtitle: message,
+                            actionLabel: "Retry",
+                            action: {
                                 Task { await viewModel.loadSubmissions(contestId: problem.contestId, handle: userManager.userHandle) }
                             }
-                            .buttonStyle(.bordered)
-                        }
+                        )
                         
                     case .idle:
                         Color.clear.onAppear {
@@ -43,10 +41,10 @@ extension ProblemListView {
                         let problemSubmissions = allSubmissions.filter { $0.problem.index == problem.index }
                         
                         if problemSubmissions.isEmpty {
-                            ContentUnavailableView(
-                                "No Attempts Yet",
-                                systemImage: "folder.badge.questionmark",
-                                description: Text("You haven't submitted any solutions for this problem yet. Give it a shot!")
+                            EmptyStateView(
+                                icon: "folder.badge.questionmark",
+                                title: "No Attempts Yet",
+                                subtitle: "You haven't submitted any solutions for this problem yet. Give it a shot!"
                             )
                         } else {
                             ScrollView {

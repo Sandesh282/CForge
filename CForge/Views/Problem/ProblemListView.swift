@@ -26,20 +26,15 @@ struct ProblemListView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     
                 case .error(let message):
-                    VStack(spacing: 16) {
-                        Image(systemName: "exclamationmark.triangle")
-                            .font(.system(size: 50))
-                            .foregroundColor(.red)
-                        Text(message)
-                            .multilineTextAlignment(.center)
-                            .foregroundColor(.textPrimary)
-                            .padding()
-                        Button("Retry") {
+                    EmptyStateView(
+                        icon: "exclamationmark.triangle",
+                        title: "Something Went Wrong",
+                        subtitle: message,
+                        actionLabel: "Retry",
+                        action: {
                             Task { await viewModel.loadProblems(forceRefresh: true) }
                         }
-                        .buttonStyle(.bordered)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    )
                     
                 case .idle, .loaded:
                     ScrollView {
