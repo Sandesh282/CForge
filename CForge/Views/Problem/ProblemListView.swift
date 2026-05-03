@@ -6,6 +6,7 @@ struct ProblemListView: View {
     @StateObject private var viewModel = ProblemListViewModel()
     @State internal var searchText = ""
     @State internal var selectedTag: String?
+    @State internal var selectedRatingRange: RatingRange?
 
     
 
@@ -49,7 +50,10 @@ struct ProblemListView: View {
                             
                             tagFilterBar
                                 .padding(.bottom, 8)
-                            
+
+                            ratingFilterBar
+                                .padding(.bottom, 8)
+
                             ForEach(viewModel.filteredProblems) { problem in
                                 ProblemRow(problem: problem)
                             }
@@ -79,12 +83,15 @@ struct ProblemListView: View {
             .task { await viewModel.loadProblems() }
             .task(id: searchText) {
                 do {
-                    try await Task.sleep(nanoseconds: 300_000_000) 
-                    viewModel.filterProblems(query: searchText, tag: selectedTag)
+                    try await Task.sleep(nanoseconds: 300_000_000)
+                    viewModel.filterProblems(query: searchText, tag: selectedTag, ratingRange: selectedRatingRange)
                 } catch {}
             }
             .task(id: selectedTag) {
-                viewModel.filterProblems(query: searchText, tag: selectedTag)
+                viewModel.filterProblems(query: searchText, tag: selectedTag, ratingRange: selectedRatingRange)
+            }
+            .task(id: selectedRatingRange) {
+                viewModel.filterProblems(query: searchText, tag: selectedTag, ratingRange: selectedRatingRange)
             }
         }
     }
@@ -132,7 +139,7 @@ struct ProblemListView: View {
                 ForEach(Array(Set(problems.flatMap { $0.tags })).sorted(), id: \.self) { tag in
                     Button(action: {
                         selectedTag = selectedTag == tag ? nil : tag
-                        viewModel.filterProblems(query: searchText, tag: selectedTag)
+                        viewModel.filterProblems(query: searchText, tag: selectedTag, ratingRange: selectedRatingRange)
                     }) {
                         Text(tag.capitalized)
                             .font(.caption)
@@ -172,6 +179,52 @@ struct ProblemListView: View {
         }
     }
     
+    private var ratingFilterBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(RatingRange.allCases) { ratingRange in
+                    Button(action: {
+                        selectedRatingRange = selectedRatingRange == ratingRange ? nil : ratingRange
+                        viewModel.filterProblems(query: searchText, tag: selectedTag, ratingRange: selectedRatingRange)
+                    }) {
+                        Text(ratingRange.label)
+                            .font(.caption)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(
+                                    ZStack {
+                                        if selectedRatingRange == ratingRange {
+                                            LinearGradient(
+                                                colors: [.neonBlue, .neonPurple],
+                                                startPoint: .topLeading,
+                                                endPoint: .bottomTrailing
+                                            )
+                                        } else {
+                                            Color.darkerBackground
+                                        }
+                                    }
+                                )
+                            .foregroundColor(selectedRatingRange == ratingRange ? .white : .primary)
+                            .cornerRadius(12)
+                            .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(
+                                            LinearGradient(
+                                                colors: [.neonBlue.opacity(0.4), .neonPurple.opacity(0.4)],
+                                                startPoint: .topLeading,
+                                                endPoint: .bottomTrailing
+                                            ),
+                                            lineWidth: 1
+                                        )
+                                )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal)
+        }
+    }
+
     // MARK: - Problem Row
     struct ProblemRow: View {
         let problem: Problem

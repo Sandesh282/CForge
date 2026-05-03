@@ -48,7 +48,7 @@ final class ProblemListViewModel: ObservableObject {
         }
     }
     
-    func filterProblems(query: String, tag: String?) {
+    func filterProblems(query: String, tag: String?, ratingRange: RatingRange? = nil) {
         filterTask?.cancel()
         
         let sourceProblems = allProblems
@@ -57,7 +57,8 @@ final class ProblemListViewModel: ObservableObject {
             let filtered = ProblemFilterEngine.filter(
                 problems: sourceProblems,
                 query: query,
-                selectedTag: tag
+                selectedTag: tag,
+                ratingRange: ratingRange
             )
             
             if Task.isCancelled { return }
