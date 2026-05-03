@@ -306,8 +306,8 @@ struct ContestDetailView: View {
                infoRow(icon: "clock", title: "Duration",
                       value: contest.duration)
                
-               infoRow(icon: "person.2.fill", title: "Participants",
-                      value: "12,345 registered")
+               infoRow(icon: "person.2.fill", title: "Type",
+                      value: contest.type)
            }
            .padding()
            .background(
