@@ -28,9 +28,11 @@ struct ProfileView: View {
                 }
                 .padding()
             } else if let errorMessage = errorMessage {
-                Text(errorMessage)
-                    .foregroundColor(.red)
-                    .padding()
+                EmptyStateView(
+                    icon: "exclamationmark.triangle",
+                    title: "Couldn't Load Profile",
+                    subtitle: errorMessage
+                )
             } else {
                 ProgressView("Fetching Profile...")
             }
@@ -65,17 +67,25 @@ struct ProfileView: View {
                     ))
                     .frame(width: 80, height: 80)
                 
-                Image(systemName: "person.fill")
+                WebImage(url: normalizeAvatarURL(user.titlePhoto ?? user.avatar))
                     .resizable()
-                    .scaledToFit()
-                    .frame(width: 40, height: 40)
-                    .foregroundStyle(
-                        LinearGradient(
-                            colors: [.neonBlue, .neonPurple],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
+                    .indicator(.activity)
+                    .scaledToFill()
+                    .frame(width: 80, height: 80)
+                    .clipShape(Circle())
+                    .placeholder {
+                        Image(systemName: "person.fill")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 40, height: 40)
+                            .foregroundStyle(
+                                LinearGradient(
+                                    colors: [.neonBlue, .neonPurple],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                )
+                            )
+                    }
             }
             .overlay(
                 Circle()
@@ -123,6 +133,12 @@ struct ProfileView: View {
             }
         }
         .padding(.vertical)
+    }
+
+    private func normalizeAvatarURL(_ raw: String?) -> URL? {
+        guard let raw = raw, !raw.isEmpty else { return nil }
+        let normalized = raw.hasPrefix("//") ? "https:" + raw : raw
+        return URL(string: normalized)
     }
     
     // MARK: - Rating Section
