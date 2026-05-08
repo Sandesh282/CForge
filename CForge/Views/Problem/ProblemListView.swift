@@ -4,9 +4,9 @@ import WebKit
 struct ProblemListView: View {
   
     @StateObject private var viewModel = ProblemListViewModel()
-    @State internal var searchText = ""
-    @State internal var selectedTag: String?
-    @State internal var selectedRatingRange: RatingRange?
+    @State private var searchText = ""
+    @State private var selectedTag: String?
+    @State private var selectedRatingRange: RatingRange?
 
     
 
@@ -51,6 +51,10 @@ struct ProblemListView: View {
                             tagFilterBar
                                 .padding(.bottom, 8)
 
+                            Text("Rating")
+                                .font(.caption2)
+                                .foregroundColor(.textSecondary)
+                                .padding(.horizontal)
                             ratingFilterBar
                                 .padding(.bottom, 8)
 
@@ -139,7 +143,6 @@ struct ProblemListView: View {
                 ForEach(Array(Set(problems.flatMap { $0.tags })).sorted(), id: \.self) { tag in
                     Button(action: {
                         selectedTag = selectedTag == tag ? nil : tag
-                        viewModel.filterProblems(query: searchText, tag: selectedTag, ratingRange: selectedRatingRange)
                     }) {
                         Text(tag.capitalized)
                             .font(.caption)
@@ -185,7 +188,6 @@ struct ProblemListView: View {
                 ForEach(RatingRange.allCases) { ratingRange in
                     Button(action: {
                         selectedRatingRange = selectedRatingRange == ratingRange ? nil : ratingRange
-                        viewModel.filterProblems(query: searchText, tag: selectedTag, ratingRange: selectedRatingRange)
                     }) {
                         Text(ratingRange.label)
                             .font(.caption)
