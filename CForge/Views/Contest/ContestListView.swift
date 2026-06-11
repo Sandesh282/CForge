@@ -14,7 +14,7 @@ struct ContestListView: View {
         NavigationStack {
             Group {
                 if contests.isEmpty && !isRefreshing {
-                    EmptyStateView(icon: "calendar", title: "Loading Contests...")
+                    ProgressView("Loading Contests...")
                         .onAppear { Task { await loadContests() } }
                 } else {
                     contentView

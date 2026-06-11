@@ -135,12 +135,6 @@ struct ProfileView: View {
         .padding(.vertical)
     }
 
-    private func normalizeAvatarURL(_ raw: String?) -> URL? {
-        guard let raw = raw, !raw.isEmpty else { return nil }
-        let normalized = raw.hasPrefix("//") ? "https:" + raw : raw
-        return URL(string: normalized)
-    }
-    
     // MARK: - Rating Section
     private func ratingSection(user: CodeforcesUser) -> some View {
         

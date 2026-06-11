@@ -26,8 +26,7 @@ extension ProblemListView {
                             icon: "exclamationmark.triangle",
                             title: "Error Fetching Data",
                             subtitle: message,
-                            actionLabel: "Retry",
-                            action: {
+                            action: .init(label: "Retry") {
                                 Task { await viewModel.loadSubmissions(contestId: problem.contestId, handle: userManager.userHandle) }
                             }
                         )

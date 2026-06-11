@@ -1,23 +1,33 @@
 import SwiftUI
 
 struct EmptyStateView: View {
+    /// A label/handler pair for the optional call-to-action button.
+    /// Grouping them in one struct makes it impossible to pass a label
+    /// without a handler (or vice versa) and silently lose the button.
+    struct Action {
+        let label: String
+        let handler: () -> Void
+
+        init(label: String, handler: @escaping () -> Void) {
+            self.label = label
+            self.handler = handler
+        }
+    }
+
     let icon: String
     let title: String
     let subtitle: String?
-    let actionLabel: String?
-    let action: (() -> Void)?
+    let action: Action?
 
     init(
         icon: String,
         title: String,
         subtitle: String? = nil,
-        actionLabel: String? = nil,
-        action: (() -> Void)? = nil
+        action: Action? = nil
     ) {
         self.icon = icon
         self.title = title
         self.subtitle = subtitle
-        self.actionLabel = actionLabel
         self.action = action
     }
 
@@ -43,9 +53,9 @@ struct EmptyStateView: View {
                     .multilineTextAlignment(.center)
                     .padding(.horizontal)
             }
-            if let actionLabel = actionLabel, let action = action {
-                Button(action: action) {
-                    Text(actionLabel)
+            if let action = action {
+                Button(action: action.handler) {
+                    Text(action.label)
                         .font(.headline)
                         .foregroundColor(.white)
                         .padding(.horizontal, 20)
@@ -72,7 +82,6 @@ struct EmptyStateView: View {
         icon: "tray",
         title: "Nothing here",
         subtitle: "Pull to refresh or check back later.",
-        actionLabel: "Retry",
-        action: {}
+        action: .init(label: "Retry") {}
     )
 }

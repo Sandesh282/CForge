@@ -30,8 +30,7 @@ struct ProblemListView: View {
                         icon: "exclamationmark.triangle",
                         title: "Something Went Wrong",
                         subtitle: message,
-                        actionLabel: "Retry",
-                        action: {
+                        action: .init(label: "Retry") {
                             Task { await viewModel.loadProblems(forceRefresh: true) }
                         }
                     )
