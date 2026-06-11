@@ -28,9 +28,11 @@ struct ProfileView: View {
                 }
                 .padding()
             } else if let errorMessage = errorMessage {
-                Text(errorMessage)
-                    .foregroundColor(.red)
-                    .padding()
+                EmptyStateView(
+                    icon: "exclamationmark.triangle",
+                    title: "Couldn't Load Profile",
+                    subtitle: errorMessage
+                )
             } else {
                 ProgressView("Fetching Profile...")
             }
@@ -65,17 +67,26 @@ struct ProfileView: View {
                     ))
                     .frame(width: 80, height: 80)
                 
-                Image(systemName: "person.fill")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 40, height: 40)
-                    .foregroundStyle(
-                        LinearGradient(
-                            colors: [.neonBlue, .neonPurple],
-                            startPoint: .top,
-                            endPoint: .bottom
+                WebImage(url: normalizeAvatarURL(user.titlePhoto ?? user.avatar)) { image in
+                    image
+                        .resizable()
+                        .scaledToFill()
+                } placeholder: {
+                    Image(systemName: "person.fill")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 40, height: 40)
+                        .foregroundStyle(
+                            LinearGradient(
+                                colors: [.neonBlue, .neonPurple],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
                         )
-                    )
+                }
+                .indicator(.activity)
+                .frame(width: 80, height: 80)
+                .clipShape(Circle())
             }
             .overlay(
                 Circle()
@@ -124,7 +135,7 @@ struct ProfileView: View {
         }
         .padding(.vertical)
     }
-    
+
     // MARK: - Rating Section
     private func ratingSection(user: CodeforcesUser) -> some View {
         

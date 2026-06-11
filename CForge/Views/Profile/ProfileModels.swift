@@ -29,6 +29,8 @@ struct CodeforcesUser: Codable {
     let contribution: Int?
     let solvedProblems: Int?
     let attemptedProblems: Int?
+    let avatar: String?
+    let titlePhoto: String?
 }
 struct CodeforcesProfileResponse: Codable {
     let status: String
