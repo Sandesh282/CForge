@@ -234,6 +234,8 @@ actor ProfileRepository {
                 .throttle(for: .seconds(1), scheduler: DispatchQueue.main, latest: true)
                 .sink { [weak self] (handle, rating) in
                     Task {
+                        // Upsert into SwiftData so the updated rating survives next cold launch
+                        await self?.persistRatingUpdate(handle: handle, newRating: rating)
                         // Invalidate the profile cache so next read fetches fresh data
                         await self?.invalidateProfileCache()
                         await self?._ratingUpdated.send((handle, rating))
@@ -254,5 +256,18 @@ actor ProfileRepository {
     private func invalidateProfileCache() {
         cachedProfile = nil
         profileFetchTime = nil
+    }
+
+    /// Upserts the live rating into the most recent `PersistedRatingChange` for `handle`.
+    /// Idempotent: re-sending the same rating produces no new row.
+    private func persistRatingUpdate(handle: String, newRating: Int) {
+        let descriptor = FetchDescriptor<PersistedRatingChange>(
+            predicate: #Predicate { $0.handle == handle },
+            sortBy: [SortDescriptor(\.ratingUpdateTimeSeconds, order: .reverse)]
+        )
+        guard let mostRecent = (try? modelContext.fetch(descriptor))?.first else { return }
+        mostRecent.newRating = newRating
+        try? modelContext.save()
+        AppLog.debug("ProfileRepository: Persisted live rating \(newRating) for \(handle)", category: .cache)
     }
 }
