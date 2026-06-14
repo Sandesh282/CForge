@@ -97,9 +97,10 @@ actor ContestRepository {
     // MARK: - WebSocket: Subscribe to Live Contest
 
     func subscribeToLiveContest(contestId: Int) {
-        // In production, replace with your WebSocket proxy URL.
-        // Codeforces does not have an official public WebSocket endpoint;
-        // a BFF (Backend for Frontend) proxy is required to relay events.
+        // NOTE: CForge is a tracker app — users do not submit from the phone.
+        // Live verdict push is forward-looking infrastructure for when Codeforces
+        // exposes an official WebSocket/push API, or when a BFF proxy is built (Issue 18).
+        // The URL below is a placeholder and will not connect in production.
         guard let url = URL(string: "wss://api.cforge.app/ws/contest/\(contestId)") else { return }
         wsService.connect(to: url)
     }

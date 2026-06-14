@@ -24,6 +24,8 @@ final class ContestViewModel: ObservableObject {
     @Published private(set) var state: ViewState = .idle
     @Published private(set) var connectionState: WebSocketConnectionState = .disconnected
     @Published private(set) var isRefreshing = false
+    /// Latest live verdict pushed by WebSocket — drives VerdictToast overlay
+    @Published var incomingVerdict: Submission? = nil
 
     // MARK: - Dependencies
 
@@ -72,6 +74,10 @@ final class ContestViewModel: ObservableObject {
         await loadContests()
     }
 
+    func dismissVerdict() {
+        incomingVerdict = nil
+    }
+
     // MARK: - Helpers
 
     func filteredContests(query: String) -> [CFContest] {
@@ -91,6 +97,14 @@ final class ContestViewModel: ObservableObject {
         repository.wsConnectionState
             .receive(on: DispatchQueue.main)
             .assign(to: &$connectionState)
+
+        // Live verdict events → VerdictToast
+        repository.verdictReceived
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] submission in
+                self?.incomingVerdict = submission
+            }
+            .store(in: &cancellables)
     }
 }
 
