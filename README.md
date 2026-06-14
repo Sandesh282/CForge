@@ -136,8 +136,6 @@ The tag success-rate features are the personalisation signal. A user with low `s
 └──────────────────────────────────────────────────────┘
 ```
 
-<br>
-
 ### Concurrency
 
 All async work in CForge is structured around Swift's actor model and `async/await`. There are no raw `DispatchQueue` calls or completion handler chains.
