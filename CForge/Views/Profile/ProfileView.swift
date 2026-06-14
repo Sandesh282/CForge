@@ -59,6 +59,7 @@ struct ProfileView: View {
             .ignoresSafeArea()
         )
         .task { await viewModel.loadProfile(handle: userHandle) }
+        .verdictToast(verdict: $viewModel.incomingVerdict) { viewModel.dismissVerdict() }
     }
 
     // MARK: - Profile Header
