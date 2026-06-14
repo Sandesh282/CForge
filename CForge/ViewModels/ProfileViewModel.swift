@@ -30,6 +30,9 @@ final class ProfileViewModel: ObservableObject {
     @Published private(set) var liveRating: Int? = nil
     /// Latest verdict received via WebSocket for toast display
     @Published var incomingVerdict: Submission? = nil
+    /// Staleness state for the banner — true when data is older than 1 hour (rating history TTL)
+    @Published private(set) var isDataStale: Bool = false
+    @Published private(set) var dataLastUpdated: Date? = nil
 
     // MARK: - Dependencies
 
@@ -117,6 +120,17 @@ final class ProfileViewModel: ObservableObject {
         repository.wsConnectionState
             .receive(on: DispatchQueue.main)
             .assign(to: &$connectionState)
+
+        // Staleness tracking — drives StalenessBanner (TTL: 60 min for rating history)
+        repository.dataLastUpdated
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] date in
+                self?.dataLastUpdated = date
+                if let date {
+                    self?.isDataStale = Date().timeIntervalSince(date) > 3600
+                }
+            }
+            .store(in: &cancellables)
     }
 }
 

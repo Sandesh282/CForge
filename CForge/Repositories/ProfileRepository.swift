@@ -49,12 +49,16 @@ actor ProfileRepository {
 
     private let _ratingUpdated = PassthroughSubject<(String, Int), Never>()
     private let _connectionStateChanged = PassthroughSubject<WebSocketConnectionState, Never>()
+    private let _dataLastUpdated = CurrentValueSubject<Date?, Never>(nil)
 
     nonisolated var ratingUpdated: AnyPublisher<(String, Int), Never> {
         _ratingUpdated.eraseToAnyPublisher()
     }
     nonisolated var wsConnectionState: AnyPublisher<WebSocketConnectionState, Never> {
         _connectionStateChanged.eraseToAnyPublisher()
+    }
+    nonisolated var dataLastUpdated: AnyPublisher<Date?, Never> {
+        _dataLastUpdated.eraseToAnyPublisher()
     }
 
     private var wsBindingTask: Task<Void, Never>?
@@ -117,6 +121,10 @@ actor ProfileRepository {
             let persisted = (try? modelContext.fetch(descriptor)) ?? []
             if !persisted.isEmpty {
                 AppLog.debug("ProfileRepository: \(persisted.count) rating changes from SwiftData", category: .cache)
+                let lastSaved = persisted.map { $0.ratingUpdateTimeSeconds }.max().map {
+                    Date(timeIntervalSince1970: TimeInterval($0))
+                } ?? Date()
+                _dataLastUpdated.send(lastSaved)
                 // Background refresh if in-memory cache is stale
                 if cachedRatingHistory == nil {
                     Task { try? await self.refreshRatingHistoryInBackground(handle: handle) }
@@ -143,6 +151,7 @@ actor ProfileRepository {
                     self.modelContext.insert(PersistedRatingChange(from: change))
                 }
                 try? self.modelContext.save()
+                self._dataLastUpdated.send(Date())
                 self.cachedRatingHistory = history
                 self.ratingHistoryFetchTime = Date()
                 self.ongoingHistoryTask = nil
@@ -162,6 +171,7 @@ actor ProfileRepository {
             modelContext.insert(PersistedRatingChange(from: change))
         }
         try? modelContext.save()
+        _dataLastUpdated.send(Date())
         cachedRatingHistory = history
         ratingHistoryFetchTime = Date()
         AppLog.debug("ProfileRepository: Background rating history refresh complete", category: .cache)

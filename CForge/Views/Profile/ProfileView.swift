@@ -60,6 +60,14 @@ struct ProfileView: View {
         )
         .task { await viewModel.loadProfile(handle: userHandle) }
         .verdictToast(verdict: $viewModel.incomingVerdict) { viewModel.dismissVerdict() }
+        .overlay(alignment: .top) {
+            if viewModel.isDataStale, let date = viewModel.dataLastUpdated {
+                StalenessBanner(lastUpdated: date)
+                    .padding(.horizontal)
+                    .padding(.top, 8)
+                    .animation(.easeInOut, value: viewModel.isDataStale)
+            }
+        }
     }
 
     // MARK: - Profile Header
