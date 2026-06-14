@@ -46,6 +46,7 @@ struct ContestListView: View {
             .task { await viewModel.loadContests() }
         }
         .verdictToast(verdict: $viewModel.incomingVerdict) { viewModel.dismissVerdict() }
+    }
 
     // MARK: - Content View
 
