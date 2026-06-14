@@ -5,7 +5,7 @@ import EventKitUI
 struct ContestListView: View {
 
     @StateObject private var viewModel = ContestViewModel()
-    @State private var searchText = ""
+
 
     // MARK: - Body
 
@@ -52,12 +52,12 @@ struct ContestListView: View {
 
     private var contentView: some View {
         ScrollView {
-            SearchBar(text: $searchText, placeholder: "Search contests...")
+            SearchBar(text: $viewModel.searchQuery, placeholder: "Search contests...")
                 .padding(.horizontal)
                 .padding(.top, 8)
                 .shadow(radius: 1)
             LazyVStack(spacing: 0) {
-                ForEach(viewModel.filteredContests(query: searchText)) { contest in
+                ForEach(viewModel.filteredResults) { contest in
                     NavigationLink {
                         ContestDetailView(contest: contest)
                     } label: {

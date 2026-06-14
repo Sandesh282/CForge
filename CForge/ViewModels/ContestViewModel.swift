@@ -26,6 +26,10 @@ final class ContestViewModel: ObservableObject {
     @Published private(set) var isRefreshing = false
     /// Latest live verdict pushed by WebSocket — drives VerdictToast overlay
     @Published var incomingVerdict: Submission? = nil
+    /// Two-way search binding — debounced 300 ms before filtering
+    @Published var searchQuery: String = ""
+    /// Filtered + sorted contest list, updated reactively via searchQuery debounce
+    @Published private(set) var filteredResults: [CFContest] = []
 
     // MARK: - Dependencies
 
@@ -103,6 +107,22 @@ final class ContestViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] submission in
                 self?.incomingVerdict = submission
+            }
+            .store(in: &cancellables)
+
+        // Debounce search — 300 ms after last keystroke before re-filtering.
+        // CombineLatest ensures filteredResults also refreshes on new data load.
+        Publishers.CombineLatest($state, $searchQuery.debounce(for: .milliseconds(300), scheduler: DispatchQueue.main))
+            .sink { [weak self] state, query in
+                guard let self else { return }
+                let contests = state.contests
+                guard !query.isEmpty else {
+                    self.filteredResults = contests.sorted { $0.startTime < $1.startTime }
+                    return
+                }
+                self.filteredResults = contests
+                    .filter { $0.name.localizedCaseInsensitiveContains(query) }
+                    .sorted { $0.startTime < $1.startTime }
             }
             .store(in: &cancellables)
     }
