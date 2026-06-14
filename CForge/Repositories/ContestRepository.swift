@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import SwiftData
 
 // MARK: - ContestRepository
 
@@ -25,6 +26,10 @@ actor ContestRepository {
     private var cachedContests: [CFContest]?
     private var contestsFetchTime: Date?
     private var ongoingFetchTask: Task<[CFContest], Error>?
+
+    // MARK: - Persistence
+
+    private let modelContext: ModelContext
 
     // MARK: - WebSocket State
 
@@ -52,17 +57,36 @@ actor ContestRepository {
 
     init(
         restService: ContestServiceProtocol = ContestService(),
-        wsService: WebSocketServiceProtocol = LiveWebSocketService()
+        wsService: WebSocketServiceProtocol = LiveWebSocketService(),
+        modelContainer: ModelContainer = PersistenceController.shared.container
     ) {
         self.restService = restService
         self.wsService = wsService
+        self.modelContext = ModelContext(modelContainer)
         bindWebSocketEvents()
     }
 
     // MARK: - REST: Fetch Upcoming Contests
 
     func getUpcomingContests(forceRefresh: Bool = false) async throws -> [CFContest] {
-        // Serve from cache if within TTL
+        // 1. Serve from SwiftData immediately — offline-first cold launch path
+        if !forceRefresh {
+            let persisted = (try? modelContext.fetch(FetchDescriptor<PersistedContest>())) ?? []
+            let upcoming = persisted
+                .filter { $0.phase == "BEFORE" }
+                .map { $0.toDomain() }
+                .sorted { ($0.startTimeSeconds ?? 0) < ($1.startTimeSeconds ?? 0) }
+            if !upcoming.isEmpty {
+                AppLog.debug("ContestRepository: \(upcoming.count) contests from SwiftData", category: .cache)
+                // Background refresh if in-memory cache is stale
+                if isCacheStale() {
+                    Task { try? await self.refreshInBackground() }
+                }
+                return upcoming
+            }
+        }
+
+        // 2. In-memory TTL cache
         if !forceRefresh, let cached = cachedContests, let fetchTime = contestsFetchTime {
             if Date().timeIntervalSince(fetchTime) < CachePolicy.contestListTTL {
                 AppLog.debug("ContestRepository: Returning cached contests", category: .cache)
@@ -70,7 +94,7 @@ actor ContestRepository {
             }
         }
 
-        // Deduplicate in-flight requests
+        // 3. Network fetch + deduplicate in-flight + persist
         if let ongoing = ongoingFetchTask {
             AppLog.debug("ContestRepository: Joining ongoing fetch task", category: .network)
             return try await ongoing.value
@@ -79,6 +103,10 @@ actor ContestRepository {
         let task = Task<[CFContest], Error> {
             do {
                 let contests = try await self.restService.fetchUpcomingContests()
+                for contest in contests {
+                    self.modelContext.insert(PersistedContest(from: contest))
+                }
+                try? self.modelContext.save()
                 self.cachedContests = contests
                 self.contestsFetchTime = Date()
                 self.ongoingFetchTask = nil
@@ -92,6 +120,24 @@ actor ContestRepository {
 
         ongoingFetchTask = task
         return try await task.value
+    }
+
+    // MARK: - Private Persistence Helpers
+
+    private func isCacheStale() -> Bool {
+        guard let fetchTime = contestsFetchTime else { return true }
+        return Date().timeIntervalSince(fetchTime) >= CachePolicy.contestListTTL
+    }
+
+    private func refreshInBackground() async throws {
+        let contests = try await restService.fetchUpcomingContests()
+        for contest in contests {
+            modelContext.insert(PersistedContest(from: contest))
+        }
+        try? modelContext.save()
+        cachedContests = contests
+        contestsFetchTime = Date()
+        AppLog.debug("ContestRepository: Background refresh complete", category: .cache)
     }
 
     // MARK: - WebSocket: Subscribe to Live Contest
