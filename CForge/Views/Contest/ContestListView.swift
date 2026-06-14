@@ -52,6 +52,11 @@ struct ContestListView: View {
 
     private var contentView: some View {
         ScrollView {
+            if viewModel.isDataStale, let date = viewModel.dataLastUpdated {
+                StalenessBanner(lastUpdated: date)
+                    .padding(.horizontal)
+                    .padding(.top, 4)
+            }
             SearchBar(text: $viewModel.searchQuery, placeholder: "Search contests...")
                 .padding(.horizontal)
                 .padding(.top, 8)

@@ -30,6 +30,9 @@ final class ContestViewModel: ObservableObject {
     @Published var searchQuery: String = ""
     /// Filtered + sorted contest list, updated reactively via searchQuery debounce
     @Published private(set) var filteredResults: [CFContest] = []
+    /// Staleness state for the banner — true when data is older than 5 minutes
+    @Published private(set) var isDataStale: Bool = false
+    @Published private(set) var dataLastUpdated: Date? = nil
 
     // MARK: - Dependencies
 
@@ -107,6 +110,17 @@ final class ContestViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] submission in
                 self?.incomingVerdict = submission
+            }
+            .store(in: &cancellables)
+
+        // Staleness tracking — drives StalenessBanner
+        repository.dataLastUpdated
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] date in
+                self?.dataLastUpdated = date
+                if let date {
+                    self?.isDataStale = Date().timeIntervalSince(date) > 300
+                }
             }
             .store(in: &cancellables)
 

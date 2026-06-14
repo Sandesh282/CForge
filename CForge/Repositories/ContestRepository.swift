@@ -42,6 +42,7 @@ actor ContestRepository {
     private let _standingsUpdated = PassthroughSubject<(Int, [StandingsRow]), Never>()
     private let _verdictReceived = PassthroughSubject<Submission, Never>()
     private let _connectionStateChanged = PassthroughSubject<WebSocketConnectionState, Never>()
+    private let _dataLastUpdated = CurrentValueSubject<Date?, Never>(nil)
 
     nonisolated var standingsUpdated: AnyPublisher<(Int, [StandingsRow]), Never> {
         _standingsUpdated.eraseToAnyPublisher()
@@ -51,6 +52,11 @@ actor ContestRepository {
     }
     nonisolated var wsConnectionState: AnyPublisher<WebSocketConnectionState, Never> {
         _connectionStateChanged.eraseToAnyPublisher()
+    }
+    /// Emits the timestamp of the last successful data refresh (network or persisted).
+    /// Nil until the first data is served. ViewModels use this to drive the staleness banner.
+    nonisolated var dataLastUpdated: AnyPublisher<Date?, Never> {
+        _dataLastUpdated.eraseToAnyPublisher()
     }
 
     // MARK: - Init
@@ -78,6 +84,9 @@ actor ContestRepository {
                 .sorted { ($0.startTimeSeconds ?? 0) < ($1.startTimeSeconds ?? 0) }
             if !upcoming.isEmpty {
                 AppLog.debug("ContestRepository: \(upcoming.count) contests from SwiftData", category: .cache)
+                // Report the most-recent persisted timestamp to drive the staleness banner
+                let lastSaved = persisted.map { $0.updatedAt }.max() ?? Date()
+                _dataLastUpdated.send(lastSaved)
                 // Background refresh if in-memory cache is stale
                 if isCacheStale() {
                     Task { try? await self.refreshInBackground() }
@@ -107,6 +116,7 @@ actor ContestRepository {
                     self.modelContext.insert(PersistedContest(from: contest))
                 }
                 try? self.modelContext.save()
+                self._dataLastUpdated.send(Date())
                 self.cachedContests = contests
                 self.contestsFetchTime = Date()
                 self.ongoingFetchTask = nil
@@ -135,6 +145,7 @@ actor ContestRepository {
             modelContext.insert(PersistedContest(from: contest))
         }
         try? modelContext.save()
+        _dataLastUpdated.send(Date())
         cachedContests = contests
         contestsFetchTime = Date()
         AppLog.debug("ContestRepository: Background refresh complete", category: .cache)
