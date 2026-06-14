@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 
 @main
 
@@ -33,6 +34,11 @@ struct CForgeApp: App {
                 }
             }
         }
+        .modelContainer(for: [
+            PersistedContest.self,
+            PersistedProblem.self,
+            PersistedRatingChange.self
+        ])
     }
 }
 
