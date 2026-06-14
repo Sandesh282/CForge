@@ -171,7 +171,9 @@ actor ContestRepository {
         wsTask = Task { [weak wsService, weak self] in
             guard let wsService else { return }
 
-            // Throttle verdict events to one per 500ms to prevent UI stutter
+            // NOTE: SwiftData upsert on standingsUpdated is deferred — no `standingsUpdated`
+            // WebSocket event exists yet (requires a BFF proxy). When the event is available,
+            // update PersistedContest fields here and call modelContext.save().
             var cancellables = Set<AnyCancellable>()
 
             wsService.events
