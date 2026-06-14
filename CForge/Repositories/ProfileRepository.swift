@@ -172,7 +172,8 @@ actor ProfileRepository {
             guard let wsService else { return }
             var cancellables = Set<AnyCancellable>()
 
-            // Rating update events — invalidate cache and republish
+            // Rating update events — throttled to ≤ 1 per second to prevent
+            // excessive ProfileView re-renders during burst updates in live contests.
             wsService.events
                 .compactMap { event -> (String, Int)? in
                     if case .ratingUpdate(let handle, let rating) = event {
@@ -180,7 +181,7 @@ actor ProfileRepository {
                     }
                     return nil
                 }
-                .receive(on: DispatchQueue.main)
+                .throttle(for: .seconds(1), scheduler: DispatchQueue.main, latest: true)
                 .sink { [weak self] (handle, rating) in
                     Task {
                         // Invalidate the profile cache so next read fetches fresh data
