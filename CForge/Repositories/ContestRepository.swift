@@ -98,9 +98,8 @@ actor ContestRepository {
 
     func subscribeToLiveContest(contestId: Int) {
         // NOTE: CForge is a tracker app — users do not submit from the phone.
-        // Live verdict push is forward-looking infrastructure for when Codeforces
-        // exposes an official WebSocket/push API, or when a BFF proxy is built (Issue 18).
-        // The URL below is a placeholder and will not connect in production.
+        // Live verdict push is forward-looking infrastructure pending an official
+        // Codeforces push API or a custom BFF proxy. Placeholder URL below.
         guard let url = URL(string: "wss://api.cforge.app/ws/contest/\(contestId)") else { return }
         wsService.connect(to: url)
     }
