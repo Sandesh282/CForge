@@ -34,11 +34,7 @@ struct CForgeApp: App {
                 }
             }
         }
-        .modelContainer(for: [
-            PersistedContest.self,
-            PersistedProblem.self,
-            PersistedRatingChange.self
-        ])
+        .modelContainer(PersistenceController.shared.container)
     }
 }
 

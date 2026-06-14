@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import SwiftData
 
 // MARK: - ProfileRepository
 
@@ -58,14 +59,20 @@ actor ProfileRepository {
 
     private var wsBindingTask: Task<Void, Never>?
 
+    // MARK: - Persistence
+
+    private let modelContext: ModelContext
+
     // MARK: - Init
 
     init(
         profileService: ProfileServiceProtocol = ProfileService(),
-        wsService: WebSocketServiceProtocol = LiveWebSocketService()
+        wsService: WebSocketServiceProtocol = LiveWebSocketService(),
+        modelContainer: ModelContainer = PersistenceController.shared.container
     ) {
         self.profileService = profileService
         self.wsService = wsService
+        self.modelContext = ModelContext(modelContainer)
         bindWebSocketEvents()
     }
 
@@ -101,6 +108,24 @@ actor ProfileRepository {
     // MARK: - Rating History
 
     func getRatingHistory(handle: String, forceRefresh: Bool = false) async throws -> [RatingChange] {
+        // 1. Serve from SwiftData immediately (offline-first)
+        if !forceRefresh {
+            let descriptor = FetchDescriptor<PersistedRatingChange>(
+                predicate: #Predicate { $0.handle == handle },
+                sortBy: [SortDescriptor(\.ratingUpdateTimeSeconds)]
+            )
+            let persisted = (try? modelContext.fetch(descriptor)) ?? []
+            if !persisted.isEmpty {
+                AppLog.debug("ProfileRepository: \(persisted.count) rating changes from SwiftData", category: .cache)
+                // Background refresh if in-memory cache is stale
+                if cachedRatingHistory == nil {
+                    Task { try? await self.refreshRatingHistoryInBackground(handle: handle) }
+                }
+                return persisted.map { $0.toDomain() }
+            }
+        }
+
+        // 2. In-memory TTL cache
         if !forceRefresh, let cached = cachedRatingHistory, let time = ratingHistoryFetchTime,
            Date().timeIntervalSince(time) < CacheTTL.ratingHistory {
             AppLog.debug("ProfileRepository: Returning cached rating history", category: .cache)
@@ -114,6 +139,10 @@ actor ProfileRepository {
         let task = Task<[RatingChange], Error> {
             do {
                 let history = try await self.profileService.fetchRatingHistory(handle: handle)
+                for change in history {
+                    self.modelContext.insert(PersistedRatingChange(from: change))
+                }
+                try? self.modelContext.save()
                 self.cachedRatingHistory = history
                 self.ratingHistoryFetchTime = Date()
                 self.ongoingHistoryTask = nil
@@ -125,6 +154,17 @@ actor ProfileRepository {
         }
         ongoingHistoryTask = task
         return try await task.value
+    }
+
+    private func refreshRatingHistoryInBackground(handle: String) async throws {
+        let history = try await profileService.fetchRatingHistory(handle: handle)
+        for change in history {
+            modelContext.insert(PersistedRatingChange(from: change))
+        }
+        try? modelContext.save()
+        cachedRatingHistory = history
+        ratingHistoryFetchTime = Date()
+        AppLog.debug("ProfileRepository: Background rating history refresh complete", category: .cache)
     }
 
     // MARK: - Solved Count
