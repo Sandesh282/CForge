@@ -81,13 +81,10 @@ struct ProblemFilterEngineRatingRangeTests {
     }
     
     @Test func filterExcludesUpperBound() {
-        let problems = [
-            makeProblem(id: "upper-excluded", rating: 1200),
-            makeProblem(id: "upper-included-elsewhere", rating: 1200)
-        ]
+        let problem = makeProblem(id: "boundary", rating: 1200)
         
         let inLow = ProblemFilterEngine.filter(
-            problems: problems,
+            problems: [problem],
             query: "",
             selectedTag: nil,
             ratingRange: .r1000to1200
@@ -96,13 +93,13 @@ struct ProblemFilterEngineRatingRangeTests {
         #expect(inLow.isEmpty)
         
         let inHigh = ProblemFilterEngine.filter(
-            problems: problems,
+            problems: [problem],
             query: "",
             selectedTag: nil,
             ratingRange: .r1200to1400
         )
         
-        #expect(inHigh.count == 2)
+        #expect(inHigh.count == 1)
     }
     
     private func makeProblem(id: String, rating: Int?) -> Problem {

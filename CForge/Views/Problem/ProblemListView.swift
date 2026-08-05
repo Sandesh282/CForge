@@ -47,7 +47,11 @@ struct ProblemListView: View {
                         LazyVStack(spacing: 16) {
                             SearchBar(text: $searchText, placeholder: "Search by name or rating")
                                 .padding(.horizontal)
-                            
+
+                            Text("Tags")
+                                .font(.caption2)
+                                .foregroundColor(.textSecondary)
+                                .padding(.horizontal)
                             tagFilterBar
                                 .padding(.bottom, 8)
 
@@ -194,18 +198,18 @@ struct ProblemListView: View {
                             .padding(.horizontal, 12)
                             .padding(.vertical, 6)
                             .background(
-                                    ZStack {
-                                        if selectedRatingRange == ratingRange {
-                                            LinearGradient(
-                                                colors: [.neonBlue, .neonPurple],
-                                                startPoint: .topLeading,
-                                                endPoint: .bottomTrailing
-                                            )
-                                        } else {
-                                            Color.darkerBackground
-                                        }
+                                ZStack {
+                                    if selectedRatingRange == ratingRange {
+                                        LinearGradient(
+                                            colors: [.neonBlue, .neonPurple],
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        )
+                                    } else {
+                                        Color.darkerBackground
                                     }
-                                )
+                                }
+                            )
                             .foregroundColor(selectedRatingRange == ratingRange ? .white : .primary)
                             .cornerRadius(12)
                             .overlay(
