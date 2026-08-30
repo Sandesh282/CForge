@@ -126,11 +126,15 @@ actor SubmissionRepository {
 
     private func bindWebSocketEvents() {
         wsTask = Task { [weak self] in
-            guard let self, let wsService else { return }
+            // Access wsService via optional chain — wsService is a non-optional `let` on
+            // the actor, so it cannot appear in a [weak wsService] capture list.
+            // Using self?.wsService also avoids promoting self to a strong reference
+            // across the indefinitely-suspending for-await loop (retain-cycle fix).
+            guard let wsService = await self?.wsService else { return }
 
             for await event in wsService.eventStream {
                 guard case .submissionVerdict(let submission) = event else { continue }
-                await self.scheduleVerdictEmission(submission)
+                await self?.scheduleVerdictEmission(submission)
             }
         }
     }
