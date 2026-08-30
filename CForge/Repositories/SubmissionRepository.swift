@@ -48,10 +48,21 @@ actor SubmissionRepository {
     // Actor isolation guarantees no races on these fields.
     // On first event arrival the throttle window opens; subsequent events within
     // the window simply overwrite `pendingVerdict`. When the window closes the
-    // *latest* value is flushed — matching Combine's .throttle(latest: true) semantics.
+    // *latest* value is flushed.
+    // Trailing-edge latest-wins throttle: unlike Combine's .throttle(latest: true)
+    // which emits the first event immediately, this delays the first emission by
+    // the full 500 ms window duration.
 
     private var pendingVerdict: Submission?
     private var verdictThrottleTask: Task<Void, Never>?
+
+    deinit {
+        // Explicitly cancel long-lived tasks so child for-await loops terminate
+        // promptly on actor deallocation. Task.cancel() is synchronous and safe
+        // to call from a non-isolated deinit.
+        wsTask?.cancel()
+        verdictThrottleTask?.cancel()
+    }
 
     var verdictReceived: AsyncStream<Submission> {
         AsyncStream { continuation in

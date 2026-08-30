@@ -101,9 +101,20 @@ actor ProfileRepository {
     // Actor isolation guarantees no races on these fields.
     // Rating updates during live contests can burst at high frequency;
     // we open a 1-second window and flush the *latest* value on close.
+    // Trailing-edge latest-wins throttle: unlike Combine's .throttle(latest: true)
+    // which emits the first event immediately, this delays the first emission by
+    // the full 1 s window duration.
 
     private var pendingRating: (String, Int)?
     private var ratingThrottleTask: Task<Void, Never>?
+
+    deinit {
+        // Explicitly cancel long-lived tasks so child for-await loops terminate
+        // promptly on actor deallocation. Task.cancel() is synchronous and safe
+        // to call from a non-isolated deinit.
+        wsBindingTask?.cancel()
+        ratingThrottleTask?.cancel()
+    }
 
     // MARK: - Persistence
 

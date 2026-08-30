@@ -39,11 +39,22 @@ actor ContestRepository {
     //
     // Actor isolation guarantees no races on these fields.
     // Verdict events during live contests can burst rapidly;
-    // we open a 500 ms window and flush the *latest* value on close,
-    // matching Combine's .throttle(latest: true) semantics.
+    // we open a 500 ms window and flush the *latest* value on close.
+    // This is a trailing-edge latest-wins throttle — unlike Combine's
+    // .throttle(latest: true) which emits immediately then again at window end,
+    // this delays the first emission by the full window duration.
 
     private var pendingVerdict: Submission?
     private var verdictThrottleTask: Task<Void, Never>?
+
+    deinit {
+        // Explicitly cancel the long-lived binding task so that its child
+        // for-await loops terminate promptly instead of running until the
+        // next AsyncStream element arrives. Task.cancel() is synchronous
+        // and safe to call from a non-isolated deinit.
+        wsTask?.cancel()
+        verdictThrottleTask?.cancel()
+    }
 
     // MARK: - AsyncStream Outputs
 
@@ -241,7 +252,8 @@ actor ContestRepository {
     }
 
     /// Records the latest verdict and opens a 500 ms flush window if none is open.
-    /// Implements latest-wins throttle matching Combine's `.throttle(latest: true)` semantics.
+    /// Trailing-edge latest-wins throttle: all events within the window overwrite the
+    /// pending slot; the window-close flush always delivers the *latest* verdict.
     private func scheduleVerdictEmission(_ submission: Submission) {
         pendingVerdict = submission
         guard verdictThrottleTask == nil else { return }  // window already open
