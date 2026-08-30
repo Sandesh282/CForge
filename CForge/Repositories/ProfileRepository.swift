@@ -1,5 +1,4 @@
 import Foundation
-import Combine
 import SwiftData
 
 // MARK: - ProfileRepository
@@ -45,21 +44,55 @@ actor ProfileRepository {
     private var ongoingHistoryTask: Task<[RatingChange], Error>?
     private var ongoingSolvedTask: Task<Int, Error>?
 
-    // MARK: - WebSocket Outputs
+    // MARK: - AsyncStream Outputs
+    //
+    // Each property vends a fresh AsyncStream backed by a stored continuation.
+    // Downstream consumers (ViewModels) iterate these with `for await`.
 
-    private let _ratingUpdated = PassthroughSubject<(String, Int), Never>()
-    private let _connectionStateChanged = PassthroughSubject<WebSocketConnectionState, Never>()
-    private let _dataLastUpdated = CurrentValueSubject<Date?, Never>(nil)
+    private var ratingContinuations:  [UUID: AsyncStream<(String, Int)>.Continuation] = [:]
+    private var stateContinuations:   [UUID: AsyncStream<WebSocketConnectionState>.Continuation] = [:]
+    private var updatedContinuations: [UUID: AsyncStream<Date?>.Continuation] = [:]
+    private var _lastUpdated: Date?
 
-    nonisolated var ratingUpdated: AnyPublisher<(String, Int), Never> {
-        _ratingUpdated.eraseToAnyPublisher()
+    /// Yields `(handle, newRating)` whenever a live rating-update arrives.
+    var ratingUpdated: AsyncStream<(String, Int)> {
+        AsyncStream { continuation in
+            let id = UUID()
+            ratingContinuations[id] = continuation
+            continuation.onTermination = { [weak self] _ in
+                Task { await self?.removeRatingContinuation(id: id) }
+            }
+        }
     }
-    nonisolated var wsConnectionState: AnyPublisher<WebSocketConnectionState, Never> {
-        _connectionStateChanged.eraseToAnyPublisher()
+
+    /// Yields the current WebSocket connection state and all subsequent changes.
+    var wsConnectionState: AsyncStream<WebSocketConnectionState> {
+        AsyncStream { continuation in
+            let id = UUID()
+            stateContinuations[id] = continuation
+            continuation.onTermination = { [weak self] _ in
+                Task { await self?.removeStateContinuation(id: id) }
+            }
+        }
     }
-    nonisolated var dataLastUpdated: AnyPublisher<Date?, Never> {
-        _dataLastUpdated.eraseToAnyPublisher()
+
+    /// Yields the timestamp of the last successful data refresh (nil until first load).
+    var dataLastUpdated: AsyncStream<Date?> {
+        let current = _lastUpdated
+        return AsyncStream { continuation in
+            let id = UUID()
+            continuation.yield(current)
+            updatedContinuations[id] = continuation
+            continuation.onTermination = { [weak self] _ in
+                Task { await self?.removeUpdatedContinuation(id: id) }
+            }
+        }
     }
+
+    // Continuation cleanup helpers (must run on the actor)
+    private func removeRatingContinuation(id: UUID)  { ratingContinuations.removeValue(forKey: id) }
+    private func removeStateContinuation(id: UUID)   { stateContinuations.removeValue(forKey: id) }
+    private func removeUpdatedContinuation(id: UUID) { updatedContinuations.removeValue(forKey: id) }
 
     private var wsBindingTask: Task<Void, Never>?
 
@@ -124,7 +157,7 @@ actor ProfileRepository {
                 let lastSaved = persisted.map { $0.ratingUpdateTimeSeconds }.max().map {
                     Date(timeIntervalSince1970: TimeInterval($0))
                 } ?? Date()
-                _dataLastUpdated.send(lastSaved)
+                emitUpdated(lastSaved)
                 // Background refresh if in-memory cache is stale
                 if cachedRatingHistory == nil {
                     Task { try? await self.refreshRatingHistoryInBackground(handle: handle) }
@@ -151,7 +184,7 @@ actor ProfileRepository {
                     self.modelContext.insert(PersistedRatingChange(from: change))
                 }
                 try? self.modelContext.save()
-                self._dataLastUpdated.send(Date())
+                self.emitUpdated(Date())
                 self.cachedRatingHistory = history
                 self.ratingHistoryFetchTime = Date()
                 self.ongoingHistoryTask = nil
@@ -171,7 +204,7 @@ actor ProfileRepository {
             modelContext.insert(PersistedRatingChange(from: change))
         }
         try? modelContext.save()
-        _dataLastUpdated.send(Date())
+        emitUpdated(Date())
         cachedRatingHistory = history
         ratingHistoryFetchTime = Date()
         AppLog.debug("ProfileRepository: Background rating history refresh complete", category: .cache)
@@ -218,44 +251,57 @@ actor ProfileRepository {
     }
 
     private func bindWebSocketEvents() {
-        wsBindingTask = Task { [weak wsService, weak self] in
-            guard let wsService else { return }
-            var cancellables = Set<AnyCancellable>()
+        wsBindingTask = Task { [weak self, weak wsService] in
+            guard let self, let wsService else { return }
 
-            // Rating update events — throttled to ≤ 1 per second to prevent
-            // excessive ProfileView re-renders during burst updates in live contests.
-            wsService.events
-                .compactMap { event -> (String, Int)? in
-                    if case .ratingUpdate(let handle, let rating) = event {
-                        return (handle, rating)
-                    }
-                    return nil
-                }
-                .throttle(for: .seconds(1), scheduler: DispatchQueue.main, latest: true)
-                .sink { [weak self] (handle, rating) in
-                    Task {
-                        // Upsert into SwiftData so the updated rating survives next cold launch
+            // Fan-out: two concurrent child tasks — one for events, one for state changes.
+            await withTaskGroup(of: Void.self) { group in
+
+                // Rating update events — throttled to ≤ 1 per second to prevent
+                // excessive ProfileView re-renders during burst updates in live contests.
+                group.addTask { [weak self, weak wsService] in
+                    guard let wsService else { return }
+                    var lastEmit: Date = .distantPast
+                    for await event in wsService.eventStream {
+                        guard case .ratingUpdate(let handle, let rating) = event else { continue }
+                        // Manual throttle: skip events within 1 s of the last emission
+                        let now = Date()
+                        guard now.timeIntervalSince(lastEmit) >= 1.0 else { continue }
+                        lastEmit = now
                         await self?.persistRatingUpdate(handle: handle, newRating: rating)
-                        // Invalidate the profile cache so next read fetches fresh data
                         await self?.invalidateProfileCache()
-                        await self?._ratingUpdated.send((handle, rating))
+                        await self?.emitRating((handle, rating))
                     }
                 }
-                .store(in: &cancellables)
 
-            wsService.connectionState
-                .sink { [weak self] state in
-                    Task { await self?._connectionStateChanged.send(state) }
+                group.addTask { [weak self, weak wsService] in
+                    guard let wsService else { return }
+                    for await state in wsService.connectionStateStream {
+                        await self?.emitState(state)
+                    }
                 }
-                .store(in: &cancellables)
-
-            try? await Task.sleep(nanoseconds: .max)
+            }
         }
     }
 
     private func invalidateProfileCache() {
         cachedProfile = nil
         profileFetchTime = nil
+    }
+
+    // MARK: - Emission Helpers
+
+    private func emitRating(_ value: (String, Int)) {
+        ratingContinuations.values.forEach { $0.yield(value) }
+    }
+
+    private func emitState(_ state: WebSocketConnectionState) {
+        stateContinuations.values.forEach { $0.yield(state) }
+    }
+
+    private func emitUpdated(_ date: Date?) {
+        _lastUpdated = date
+        updatedContinuations.values.forEach { $0.yield(date) }
     }
 
     /// Upserts the live rating into the most recent `PersistedRatingChange` for `handle`.

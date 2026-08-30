@@ -1,5 +1,4 @@
 import Foundation
-import Combine
 
 // MARK: - SubmissionRepository
 //
@@ -39,14 +38,22 @@ actor SubmissionRepository {
     private let service: ProblemServiceProtocol
     private let wsService: WebSocketServiceProtocol
 
-    // MARK: - Publishers
+    // MARK: - AsyncStream Outputs
 
-    private let _verdictReceived = PassthroughSubject<Submission, Never>()
+    private var verdictContinuations: [UUID: AsyncStream<Submission>.Continuation] = [:]
     private var wsTask: Task<Void, Never>?
 
-    nonisolated var verdictReceived: AnyPublisher<Submission, Never> {
-        _verdictReceived.eraseToAnyPublisher()
+    var verdictReceived: AsyncStream<Submission> {
+        AsyncStream { continuation in
+            let id = UUID()
+            verdictContinuations[id] = continuation
+            continuation.onTermination = { [weak self] _ in
+                Task { await self?.removeVerdictContinuation(id: id) }
+            }
+        }
     }
+
+    private func removeVerdictContinuation(id: UUID) { verdictContinuations.removeValue(forKey: id) }
 
     // MARK: - Init
 
@@ -108,26 +115,19 @@ actor SubmissionRepository {
     // MARK: - WebSocket Binding
 
     private func bindWebSocketEvents() {
-        wsTask = Task { [weak wsService, weak self] in
-            guard let wsService else { return }
-            var cancellables = Set<AnyCancellable>()
+        wsTask = Task { [weak self, weak wsService] in
+            guard let self, let wsService else { return }
 
             // Throttle verdict events at 500 ms — prevents UI stutter during judge queue flushes.
-            wsService.events
-                .compactMap { event -> Submission? in
-                    if case .submissionVerdict(let s) = event { return s } else { return nil }
-                }
-                .throttle(for: .milliseconds(500), scheduler: DispatchQueue.main, latest: true)
-                .sink { [weak self] submission in
-                    Task {
-                        // Prepend the live verdict to every cache key matching this handle
-                        await self?.prependToCache(submission: submission)
-                        await self?._verdictReceived.send(submission)
-                    }
-                }
-                .store(in: &cancellables)
-
-            try? await Task.sleep(nanoseconds: .max)
+            var lastEmit: Date = .distantPast
+            for await event in wsService.eventStream {
+                guard case .submissionVerdict(let submission) = event else { continue }
+                let now = Date()
+                guard now.timeIntervalSince(lastEmit) >= 0.5 else { continue }
+                lastEmit = now
+                await self.prependToCache(submission: submission)
+                await self.emitVerdict(submission)
+            }
         }
     }
 
@@ -145,5 +145,9 @@ actor SubmissionRepository {
         }
 
         AppLog.debug("SubmissionRepository: Live verdict prepended for \(handle)", category: .cache)
+    }
+
+    private func emitVerdict(_ submission: Submission) {
+        verdictContinuations.values.forEach { $0.yield(submission) }
     }
 }

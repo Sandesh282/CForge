@@ -1,5 +1,4 @@
 import SwiftUI
-import Combine
 
 // MARK: - ContestViewModel
 
@@ -37,7 +36,7 @@ final class ContestViewModel: ObservableObject {
     // MARK: - Dependencies
 
     private let repository: ContestRepository
-    private var cancellables = Set<AnyCancellable>()
+    private var observationTasks: [Task<Void, Never>] = []
 
     // MARK: - Init
 
@@ -101,44 +100,53 @@ final class ContestViewModel: ObservableObject {
 
     private func bindRepositoryPublishers() {
         // WebSocket connection state → UI indicator
-        repository.wsConnectionState
-            .receive(on: DispatchQueue.main)
-            .assign(to: &$connectionState)
+        observationTasks.append(Task { [weak self] in
+            guard let self else { return }
+            for await state in await repository.wsConnectionState {
+                await MainActor.run { self.connectionState = state }
+            }
+        })
 
         // Live verdict events → VerdictToast
-        repository.verdictReceived
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] submission in
-                self?.incomingVerdict = submission
+        observationTasks.append(Task { [weak self] in
+            guard let self else { return }
+            for await submission in await repository.verdictReceived {
+                await MainActor.run { self.incomingVerdict = submission }
             }
-            .store(in: &cancellables)
+        })
 
         // Staleness tracking — drives StalenessBanner
-        repository.dataLastUpdated
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] date in
-                self?.dataLastUpdated = date
-                if let date {
-                    self?.isDataStale = Date().timeIntervalSince(date) > 300
+        observationTasks.append(Task { [weak self] in
+            guard let self else { return }
+            for await date in await repository.dataLastUpdated {
+                await MainActor.run {
+                    self.dataLastUpdated = date
+                    if let date {
+                        self.isDataStale = Date().timeIntervalSince(date) > 300
+                    }
                 }
             }
-            .store(in: &cancellables)
+        })
 
         // Debounce search — 300 ms after last keystroke before re-filtering.
-        // CombineLatest ensures filteredResults also refreshes on new data load.
-        Publishers.CombineLatest($state, $searchQuery.debounce(for: .milliseconds(300), scheduler: DispatchQueue.main))
-            .sink { [weak self] state, query in
-                guard let self else { return }
-                let contests = state.contests
-                guard !query.isEmpty else {
-                    self.filteredResults = contests.sorted { $0.startTime < $1.startTime }
-                    return
+        // Uses a separate observation task that reads the published searchQuery.
+        observationTasks.append(Task { [weak self] in
+            guard let self else { return }
+            var previousQuery: String = ""
+            while !Task.isCancelled {
+                let query = await MainActor.run { self.searchQuery }
+                if query != previousQuery {
+                    previousQuery = query
+                    let contests = await MainActor.run { self.state.contests }
+                    let filtered = query.isEmpty
+                        ? contests.sorted { $0.startTime < $1.startTime }
+                        : contests.filter { $0.name.localizedCaseInsensitiveContains(query) }
+                                  .sorted { $0.startTime < $1.startTime }
+                    await MainActor.run { self.filteredResults = filtered }
                 }
-                self.filteredResults = contests
-                    .filter { $0.name.localizedCaseInsensitiveContains(query) }
-                    .sorted { $0.startTime < $1.startTime }
+                try? await Task.sleep(nanoseconds: 300_000_000) // 300 ms debounce
             }
-            .store(in: &cancellables)
+        })
     }
 }
 

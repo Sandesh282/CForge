@@ -1,5 +1,4 @@
 import SwiftUI
-import Combine
 
 // MARK: - ProfileViewModel
 
@@ -37,7 +36,7 @@ final class ProfileViewModel: ObservableObject {
     // MARK: - Dependencies
 
     private let repository: ProfileRepository
-    private var cancellables = Set<AnyCancellable>()
+    private var observationTasks: [Task<Void, Never>] = []
 
     // MARK: - Init
 
@@ -106,31 +105,37 @@ final class ProfileViewModel: ObservableObject {
 
     private func bindRepositoryPublishers() {
         // Live rating update from WebSocket
-        repository.ratingUpdated
-            .receive(on: DispatchQueue.main)
-            .map { $0.1 }  // extract the Int rating value
-            .sink { [weak self] newRating in
-                withAnimation(.easeOut(duration: 0.5)) {
-                    self?.liveRating = newRating
+        observationTasks.append(Task { [weak self] in
+            guard let self else { return }
+            for await (_, newRating) in await repository.ratingUpdated {
+                await MainActor.run {
+                    withAnimation(.easeOut(duration: 0.5)) {
+                        self.liveRating = newRating
+                    }
                 }
             }
-            .store(in: &cancellables)
+        })
 
         // WebSocket connection state
-        repository.wsConnectionState
-            .receive(on: DispatchQueue.main)
-            .assign(to: &$connectionState)
+        observationTasks.append(Task { [weak self] in
+            guard let self else { return }
+            for await state in await repository.wsConnectionState {
+                await MainActor.run { self.connectionState = state }
+            }
+        })
 
         // Staleness tracking — drives StalenessBanner (TTL: 60 min for rating history)
-        repository.dataLastUpdated
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] date in
-                self?.dataLastUpdated = date
-                if let date {
-                    self?.isDataStale = Date().timeIntervalSince(date) > 3600
+        observationTasks.append(Task { [weak self] in
+            guard let self else { return }
+            for await date in await repository.dataLastUpdated {
+                await MainActor.run {
+                    self.dataLastUpdated = date
+                    if let date {
+                        self.isDataStale = Date().timeIntervalSince(date) > 3600
+                    }
                 }
             }
-            .store(in: &cancellables)
+        })
     }
 }
 

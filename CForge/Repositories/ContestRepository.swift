@@ -1,5 +1,4 @@
 import Foundation
-import Combine
 import SwiftData
 
 // MARK: - ContestRepository
@@ -36,28 +35,62 @@ actor ContestRepository {
     private let wsService: WebSocketServiceProtocol
     private var wsTask: Task<Void, Never>?
 
-    // MARK: - Published Outputs (via AsyncStream bridge)
-    // These subjects are internal; ViewModels observe via async sequences.
+    // MARK: - AsyncStream Outputs
 
-    private let _standingsUpdated = PassthroughSubject<(Int, [StandingsRow]), Never>()
-    private let _verdictReceived = PassthroughSubject<Submission, Never>()
-    private let _connectionStateChanged = PassthroughSubject<WebSocketConnectionState, Never>()
-    private let _dataLastUpdated = CurrentValueSubject<Date?, Never>(nil)
+    private var standingsContinuations: [UUID: AsyncStream<(Int, [StandingsRow])>.Continuation] = [:]
+    private var verdictContinuations:   [UUID: AsyncStream<Submission>.Continuation] = [:]
+    private var stateContinuations:     [UUID: AsyncStream<WebSocketConnectionState>.Continuation] = [:]
+    private var updatedContinuations:   [UUID: AsyncStream<Date?>.Continuation] = [:]
+    private var _lastUpdated: Date?
 
-    nonisolated var standingsUpdated: AnyPublisher<(Int, [StandingsRow]), Never> {
-        _standingsUpdated.eraseToAnyPublisher()
+    var standingsUpdated: AsyncStream<(Int, [StandingsRow])> {
+        AsyncStream { continuation in
+            let id = UUID()
+            standingsContinuations[id] = continuation
+            continuation.onTermination = { [weak self] _ in
+                Task { await self?.removeStandingsContinuation(id: id) }
+            }
+        }
     }
-    nonisolated var verdictReceived: AnyPublisher<Submission, Never> {
-        _verdictReceived.eraseToAnyPublisher()
+
+    var verdictReceived: AsyncStream<Submission> {
+        AsyncStream { continuation in
+            let id = UUID()
+            verdictContinuations[id] = continuation
+            continuation.onTermination = { [weak self] _ in
+                Task { await self?.removeVerdictContinuation(id: id) }
+            }
+        }
     }
-    nonisolated var wsConnectionState: AnyPublisher<WebSocketConnectionState, Never> {
-        _connectionStateChanged.eraseToAnyPublisher()
+
+    var wsConnectionState: AsyncStream<WebSocketConnectionState> {
+        AsyncStream { continuation in
+            let id = UUID()
+            stateContinuations[id] = continuation
+            continuation.onTermination = { [weak self] _ in
+                Task { await self?.removeStateContinuation(id: id) }
+            }
+        }
     }
-    /// Emits the timestamp of the last successful data refresh (network or persisted).
+
+    /// Emits the timestamp of the last successful data refresh (Network or persisted).
     /// Nil until the first data is served. ViewModels use this to drive the staleness banner.
-    nonisolated var dataLastUpdated: AnyPublisher<Date?, Never> {
-        _dataLastUpdated.eraseToAnyPublisher()
+    var dataLastUpdated: AsyncStream<Date?> {
+        let current = _lastUpdated
+        return AsyncStream { continuation in
+            let id = UUID()
+            continuation.yield(current)
+            updatedContinuations[id] = continuation
+            continuation.onTermination = { [weak self] _ in
+                Task { await self?.removeUpdatedContinuation(id: id) }
+            }
+        }
     }
+
+    private func removeStandingsContinuation(id: UUID) { standingsContinuations.removeValue(forKey: id) }
+    private func removeVerdictContinuation(id: UUID)   { verdictContinuations.removeValue(forKey: id) }
+    private func removeStateContinuation(id: UUID)     { stateContinuations.removeValue(forKey: id) }
+    private func removeUpdatedContinuation(id: UUID)   { updatedContinuations.removeValue(forKey: id) }
 
     // MARK: - Init
 
@@ -86,7 +119,7 @@ actor ContestRepository {
                 AppLog.debug("ContestRepository: \(upcoming.count) contests from SwiftData", category: .cache)
                 // Report the most-recent persisted timestamp to drive the staleness banner
                 let lastSaved = persisted.map { $0.updatedAt }.max() ?? Date()
-                _dataLastUpdated.send(lastSaved)
+                emitUpdated(lastSaved)
                 // Background refresh if in-memory cache is stale
                 if isCacheStale() {
                     Task { try? await self.refreshInBackground() }
@@ -116,7 +149,7 @@ actor ContestRepository {
                     self.modelContext.insert(PersistedContest(from: contest))
                 }
                 try? self.modelContext.save()
-                self._dataLastUpdated.send(Date())
+                self.emitUpdated(Date())
                 self.cachedContests = contests
                 self.contestsFetchTime = Date()
                 self.ongoingFetchTask = nil
@@ -145,7 +178,7 @@ actor ContestRepository {
             modelContext.insert(PersistedContest(from: contest))
         }
         try? modelContext.save()
-        _dataLastUpdated.send(Date())
+        emitUpdated(Date())
         cachedContests = contests
         contestsFetchTime = Date()
         AppLog.debug("ContestRepository: Background refresh complete", category: .cache)
@@ -168,33 +201,50 @@ actor ContestRepository {
     // MARK: - WebSocket Binding
 
     private func bindWebSocketEvents() {
-        wsTask = Task { [weak wsService, weak self] in
-            guard let wsService else { return }
+        wsTask = Task { [weak self, weak wsService] in
+            guard let self, let wsService else { return }
 
-            // NOTE: SwiftData upsert on standingsUpdated is deferred — no `standingsUpdated`
-            // WebSocket event exists yet (requires a BFF proxy). When the event is available,
-            // update PersistedContest fields here and call modelContext.save().
-            var cancellables = Set<AnyCancellable>()
+            await withTaskGroup(of: Void.self) { group in
 
-            wsService.events
-                .compactMap { event -> Submission? in
-                    if case .submissionVerdict(let s) = event { return s } else { return nil }
+                group.addTask { [weak self, weak wsService] in
+                    guard let wsService else { return }
+                    // NOTE: SwiftData upsert on standingsUpdated is deferred — no `standingsUpdated`
+                    // WebSocket event exists yet (requires a BFF proxy). When the event is available,
+                    // update PersistedContest fields here and call modelContext.save().
+                    var lastEmit: Date = .distantPast
+                    for await event in wsService.eventStream {
+                        guard case .submissionVerdict(let submission) = event else { continue }
+                        // Manual throttle: 500 ms between verdict emissions
+                        let now = Date()
+                        guard now.timeIntervalSince(lastEmit) >= 0.5 else { continue }
+                        lastEmit = now
+                        await self?.emitVerdict(submission)
+                    }
                 }
-                .throttle(for: .milliseconds(500), scheduler: DispatchQueue.main, latest: true)
-                .sink { [weak self] submission in
-                    Task { await self?._verdictReceived.send(submission) }
-                }
-                .store(in: &cancellables)
 
-            wsService.connectionState
-                .sink { [weak self] state in
-                    Task { await self?._connectionStateChanged.send(state) }
+                group.addTask { [weak self, weak wsService] in
+                    guard let wsService else { return }
+                    for await state in wsService.connectionStateStream {
+                        await self?.emitState(state)
+                    }
                 }
-                .store(in: &cancellables)
-
-            // Keep the task alive by waiting indefinitely (cancelled via wsTask?.cancel())
-            try? await Task.sleep(nanoseconds: .max)
+            }
         }
+    }
+
+    // MARK: - Emission Helpers
+
+    private func emitVerdict(_ submission: Submission) {
+        verdictContinuations.values.forEach { $0.yield(submission) }
+    }
+
+    private func emitState(_ state: WebSocketConnectionState) {
+        stateContinuations.values.forEach { $0.yield(state) }
+    }
+
+    private func emitUpdated(_ date: Date?) {
+        _lastUpdated = date
+        updatedContinuations.values.forEach { $0.yield(date) }
     }
 }
 
