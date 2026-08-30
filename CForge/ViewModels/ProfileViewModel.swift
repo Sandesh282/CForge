@@ -1,5 +1,4 @@
 import SwiftUI
-import Combine
 
 // MARK: - ProfileViewModel
 
@@ -37,7 +36,13 @@ final class ProfileViewModel: ObservableObject {
     // MARK: - Dependencies
 
     private let repository: ProfileRepository
-    private var cancellables = Set<AnyCancellable>()
+    /// Long-lived observation tasks. Cancelled in `deinit` — the direct equivalent of
+    /// `Set<AnyCancellable>` auto-cancellation when the ViewModel deallocates.
+    private var observationTasks: [Task<Void, Never>] = []
+
+    deinit {
+        observationTasks.forEach { $0.cancel() }
+    }
 
     // MARK: - Init
 
@@ -106,31 +111,42 @@ final class ProfileViewModel: ObservableObject {
 
     private func bindRepositoryPublishers() {
         // Live rating update from WebSocket
-        repository.ratingUpdated
-            .receive(on: DispatchQueue.main)
-            .map { $0.1 }  // extract the Int rating value
-            .sink { [weak self] newRating in
-                withAnimation(.easeOut(duration: 0.5)) {
-                    self?.liveRating = newRating
+        // Weak capture only inside the loop body — promoting `self` via guard let outside
+        // the loop creates a strong reference across suspensions and prevents deallocation.
+        observationTasks.append(Task { [weak self] in
+            guard let stream = await self?.repository.ratingUpdated else { return }
+            for await (_, newRating) in stream {
+                guard let self else { break }
+                await MainActor.run {
+                    withAnimation(.easeOut(duration: 0.5)) {
+                        self.liveRating = newRating
+                    }
                 }
             }
-            .store(in: &cancellables)
+        })
 
         // WebSocket connection state
-        repository.wsConnectionState
-            .receive(on: DispatchQueue.main)
-            .assign(to: &$connectionState)
+        observationTasks.append(Task { [weak self] in
+            guard let stream = await self?.repository.wsConnectionState else { return }
+            for await state in stream {
+                guard let self else { break }
+                await MainActor.run { self.connectionState = state }
+            }
+        })
 
         // Staleness tracking — drives StalenessBanner (TTL: 60 min for rating history)
-        repository.dataLastUpdated
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] date in
-                self?.dataLastUpdated = date
-                if let date {
-                    self?.isDataStale = Date().timeIntervalSince(date) > 3600
+        observationTasks.append(Task { [weak self] in
+            guard let stream = await self?.repository.dataLastUpdated else { return }
+            for await date in stream {
+                guard let self else { break }
+                await MainActor.run {
+                    self.dataLastUpdated = date
+                    if let date {
+                        self.isDataStale = Date().timeIntervalSince(date) > 3600
+                    }
                 }
             }
-            .store(in: &cancellables)
+        })
     }
 }
 

@@ -1,5 +1,4 @@
 import Foundation
-import Combine
 
 // MARK: - LiveWebSocketService
 
@@ -10,27 +9,70 @@ import Combine
 /// - Exponential backoff reconnect (2^attempt seconds, capped at 5 attempts)
 /// - 30-second ping/pong loop to detect silent connection drops
 /// - All socket callbacks are dispatched to a serial background queue to avoid blocking
-/// - Events are published on the main scheduler via the PassthroughSubject
-final class LiveWebSocketService: NSObject, WebSocketServiceProtocol {
+/// - Events are published through `AsyncStream` continuations — 100% pure Swift Concurrency,
+///   zero Combine dependency.
+///
+/// `@unchecked Sendable`: All mutable state is accessed under `lock` (continuation dictionaries)
+/// or exclusively from the URLSession delegate queue (webSocketTask, activeURL, reconnectAttempts).
+/// `_currentState` is always read and written under `lock` to prevent data races across
+/// concurrent callers (ViewModels, connect/disconnect, ping callbacks, delegate queue).
+final class LiveWebSocketService: NSObject, WebSocketServiceProtocol, @unchecked Sendable {
 
-    // MARK: - Publishers
+    // MARK: - Continuation Dictionaries
 
-    private let eventSubject = PassthroughSubject<WebSocketEvent, Never>()
-    private let stateSubject = CurrentValueSubject<WebSocketConnectionState, Never>(.disconnected)
+    /// All active event stream continuations.
+    private var eventContinuations: [UUID: AsyncStream<WebSocketEvent>.Continuation] = [:]
 
-    var events: AnyPublisher<WebSocketEvent, Never> {
-        eventSubject.eraseToAnyPublisher()
+    /// All active connection-state stream continuations.
+    private var stateContinuations: [UUID: AsyncStream<WebSocketConnectionState>.Continuation] = [:]
+
+    /// Guards ALL shared mutable state: continuation dictionaries and `_currentState`.
+    private let lock = NSLock()
+
+    /// Current connection state. MUST only be read or written under `lock`.
+    private var _currentState: WebSocketConnectionState = .disconnected
+
+    // MARK: - WebSocketServiceProtocol
+
+    /// Each call returns an independent `AsyncStream` so multiple observers
+    /// (e.g. different Repositories) can each iterate their own sequence.
+    var eventStream: AsyncStream<WebSocketEvent> {
+        AsyncStream { continuation in
+            let id = UUID()
+            lock.withLock { eventContinuations[id] = continuation }
+            continuation.onTermination = { [weak self] _ in
+                self?.lock.withLock { self?.eventContinuations.removeValue(forKey: id) }
+            }
+        }
     }
 
-    var connectionState: AnyPublisher<WebSocketConnectionState, Never> {
-        stateSubject.eraseToAnyPublisher()
+    /// Yields the current state immediately (cold-observable semantics matching
+    /// `CurrentValueSubject`), then all subsequent state changes.
+    ///
+    /// The state snapshot and the continuation registration are performed atomically
+    /// under `lock`, preventing a race where a transition fires between the two.
+    var connectionStateStream: AsyncStream<WebSocketConnectionState> {
+        AsyncStream { continuation in
+            let id = UUID()
+            // Atomic: register continuation AND read current state in the same lock region
+            // so no state transition can slip between the two operations.
+            let current: WebSocketConnectionState = lock.withLock {
+                stateContinuations[id] = continuation
+                return _currentState
+            }
+            continuation.yield(current)         // emit OUTSIDE lock — no deadlock risk
+            continuation.onTermination = { [weak self] _ in
+                self?.lock.withLock { self?.stateContinuations.removeValue(forKey: id) }
+            }
+        }
     }
 
+    /// Synchronous snapshot — for initial ViewModel binding before the async loop starts.
     var currentState: WebSocketConnectionState {
-        stateSubject.value
+        lock.withLock { _currentState }
     }
 
-    // MARK: - Internal State
+    // MARK: - Internal State (delegate-queue serialised)
 
     private var webSocketTask: URLSessionWebSocketTask?
     private var activeURL: URL?
@@ -48,7 +90,7 @@ final class LiveWebSocketService: NSObject, WebSocketServiceProtocol {
     // MARK: - Connection Lifecycle
 
     func connect(to url: URL) {
-        guard stateSubject.value == .disconnected else {
+        guard currentState == .disconnected else {
             AppLog.debug("WS: Already connected or connecting — ignoring connect(to:)", category: .network)
             return
         }
@@ -58,7 +100,7 @@ final class LiveWebSocketService: NSObject, WebSocketServiceProtocol {
 
     private func openConnection(to url: URL) {
         AppLog.debug("WS: Connecting to \(url)", category: .network)
-        stateSubject.send(.connecting)
+        updateState(.connecting)
         webSocketTask = urlSession.webSocketTask(with: url)
         webSocketTask?.resume()
         beginListening()
@@ -70,7 +112,7 @@ final class LiveWebSocketService: NSObject, WebSocketServiceProtocol {
         cancelSupportTasks()
         webSocketTask?.cancel(with: .goingAway, reason: nil)
         webSocketTask = nil
-        stateSubject.send(.disconnected)
+        updateState(.disconnected)
         reconnectAttempts = 0
         activeURL = nil
     }
@@ -97,7 +139,7 @@ final class LiveWebSocketService: NSObject, WebSocketServiceProtocol {
             switch result {
             case .success(let message):
                 self.handle(message: message)
-                self.beginListening() // Re-arm for next message
+                self.beginListening()           // Re-arm for next message
             case .failure(let error):
                 AppLog.error("WS: Receive error — \(error.localizedDescription)", category: .network)
                 self.handleConnectionLoss(error: error)
@@ -131,11 +173,11 @@ final class LiveWebSocketService: NSObject, WebSocketServiceProtocol {
         switch envelope.event {
         case "submission_verdict":
             if let submission = envelope.payload?.submission {
-                eventSubject.send(.submissionVerdict(submission: submission))
+                emit(.submissionVerdict(submission: submission))
             }
         case "rating_update":
             if let handle = envelope.payload?.handle, let rating = envelope.payload?.newRating {
-                eventSubject.send(.ratingUpdate(handle: handle, newRating: rating))
+                emit(.ratingUpdate(handle: handle, newRating: rating))
             }
         default:
             AppLog.debug("WS: Unknown event type '\(envelope.event)'", category: .network)
@@ -150,8 +192,8 @@ final class LiveWebSocketService: NSObject, WebSocketServiceProtocol {
 
         guard reconnectAttempts < maxReconnectAttempts, let url = activeURL else {
             AppLog.error("WS: Max reconnect attempts reached or no active URL", category: .network)
-            stateSubject.send(.disconnected)
-            eventSubject.send(.error(error))
+            updateState(.disconnected)
+            emit(.error(error))
             return
         }
 
@@ -159,7 +201,7 @@ final class LiveWebSocketService: NSObject, WebSocketServiceProtocol {
         let delaySeconds = pow(2.0, Double(reconnectAttempts)) // 2, 4, 8, 16, 32
         AppLog.debug("WS: Reconnecting in \(Int(delaySeconds))s (attempt \(reconnectAttempts))", category: .network)
 
-        stateSubject.send(.reconnecting(attempt: reconnectAttempts))
+        updateState(.reconnecting(attempt: reconnectAttempts))
 
         reconnectTask = Task { [weak self] in
             guard let self else { return }
@@ -192,6 +234,25 @@ final class LiveWebSocketService: NSObject, WebSocketServiceProtocol {
         reconnectTask?.cancel()
         reconnectTask = nil
     }
+
+    // MARK: - Emission Helpers
+
+    /// Delivers an event to every active continuation. Emission is done OUTSIDE
+    /// the lock to avoid any potential deadlock with the termination handler.
+    private func emit(_ event: WebSocketEvent) {
+        let continuations = lock.withLock { Array(eventContinuations.values) }
+        continuations.forEach { $0.yield(event) }
+    }
+
+    /// Updates the state snapshot (under lock) and delivers the new state to all
+    /// active continuations (outside the lock).
+    private func updateState(_ state: WebSocketConnectionState) {
+        let continuations: [AsyncStream<WebSocketConnectionState>.Continuation] = lock.withLock {
+            _currentState = state
+            return Array(stateContinuations.values)
+        }
+        continuations.forEach { $0.yield(state) }
+    }
 }
 
 // MARK: - URLSessionWebSocketDelegate
@@ -204,8 +265,8 @@ extension LiveWebSocketService: URLSessionWebSocketDelegate {
     ) {
         AppLog.debug("WS: Connection opened", category: .network)
         reconnectAttempts = 0
-        stateSubject.send(.connected)
-        eventSubject.send(.connectionStateChanged(.connected))
+        updateState(.connected)
+        emit(.connectionStateChanged(.connected))
     }
 
     func urlSession(
@@ -216,7 +277,7 @@ extension LiveWebSocketService: URLSessionWebSocketDelegate {
     ) {
         let reasonStr = reason.flatMap { String(data: $0, encoding: .utf8) } ?? "none"
         AppLog.debug("WS: Connection closed — code: \(closeCode.rawValue), reason: \(reasonStr)", category: .network)
-        stateSubject.send(.disconnected)
-        eventSubject.send(.connectionStateChanged(.disconnected))
+        updateState(.disconnected)
+        emit(.connectionStateChanged(.disconnected))
     }
 }
