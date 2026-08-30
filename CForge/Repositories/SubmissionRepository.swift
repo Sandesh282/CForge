@@ -43,6 +43,16 @@ actor SubmissionRepository {
     private var verdictContinuations: [UUID: AsyncStream<Submission>.Continuation] = [:]
     private var wsTask: Task<Void, Never>?
 
+    // MARK: - Latest-Wins Throttle State
+    //
+    // Actor isolation guarantees no races on these fields.
+    // On first event arrival the throttle window opens; subsequent events within
+    // the window simply overwrite `pendingVerdict`. When the window closes the
+    // *latest* value is flushed — matching Combine's .throttle(latest: true) semantics.
+
+    private var pendingVerdict: Submission?
+    private var verdictThrottleTask: Task<Void, Never>?
+
     var verdictReceived: AsyncStream<Submission> {
         AsyncStream { continuation in
             let id = UUID()
@@ -115,20 +125,34 @@ actor SubmissionRepository {
     // MARK: - WebSocket Binding
 
     private func bindWebSocketEvents() {
-        wsTask = Task { [weak self, weak wsService] in
+        wsTask = Task { [weak self] in
             guard let self, let wsService else { return }
 
-            // Throttle verdict events at 500 ms — prevents UI stutter during judge queue flushes.
-            var lastEmit: Date = .distantPast
             for await event in wsService.eventStream {
                 guard case .submissionVerdict(let submission) = event else { continue }
-                let now = Date()
-                guard now.timeIntervalSince(lastEmit) >= 0.5 else { continue }
-                lastEmit = now
-                await self.prependToCache(submission: submission)
-                await self.emitVerdict(submission)
+                await self.scheduleVerdictEmission(submission)
             }
         }
+    }
+
+    /// Records the latest verdict and opens a 500 ms flush window if one isn't already open.
+    /// Implements latest-wins throttle: every event within the window overwrites the pending
+    /// slot; the window-close flush always delivers the *latest* arrived verdict.
+    private func scheduleVerdictEmission(_ submission: Submission) {
+        pendingVerdict = submission
+        guard verdictThrottleTask == nil else { return }  // window already open
+        verdictThrottleTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 500_000_000)  // 500 ms window
+            await self?.flushPendingVerdict()
+        }
+    }
+
+    private func flushPendingVerdict() {
+        verdictThrottleTask = nil
+        guard let verdict = pendingVerdict else { return }
+        pendingVerdict = nil
+        prependToCache(submission: verdict)
+        emitVerdict(verdict)
     }
 
     /// Inserts the incoming live verdict at the front of all cache entries for its author.

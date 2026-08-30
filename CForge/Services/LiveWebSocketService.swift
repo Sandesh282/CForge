@@ -12,28 +12,30 @@ import Foundation
 /// - Events are published through `AsyncStream` continuations — 100% pure Swift Concurrency,
 ///   zero Combine dependency.
 ///
-/// `@unchecked Sendable`: The mutable state (`webSocketTask`, `activeURL`, etc.) is always
-/// accessed from the `URLSession` delegate queue (serial) or from callers who hold the
-/// appropriate task reference. We document and enforce this invariant instead of using
-/// an actor, because `URLSessionDelegate` conformance requires `NSObject` inheritance
-/// which prevents actor adoption.
+/// `@unchecked Sendable`: All mutable state is accessed under `lock` (continuation dictionaries)
+/// or exclusively from the URLSession delegate queue (webSocketTask, activeURL, reconnectAttempts).
+/// `_currentState` is always read and written under `lock` to prevent data races across
+/// concurrent callers (ViewModels, connect/disconnect, ping callbacks, delegate queue).
 final class LiveWebSocketService: NSObject, WebSocketServiceProtocol, @unchecked Sendable {
 
-    // MARK: - AsyncStream Continuations
+    // MARK: - Continuation Dictionaries
 
-    /// All active event stream continuations. Each call to `eventStream` appends one.
+    /// All active event stream continuations.
     private var eventContinuations: [UUID: AsyncStream<WebSocketEvent>.Continuation] = [:]
 
     /// All active connection-state stream continuations.
     private var stateContinuations: [UUID: AsyncStream<WebSocketConnectionState>.Continuation] = [:]
 
-    /// Guards access to the continuation dictionaries from the URLSession delegate queue.
+    /// Guards ALL shared mutable state: continuation dictionaries and `_currentState`.
     private let lock = NSLock()
+
+    /// Current connection state. MUST only be read or written under `lock`.
+    private var _currentState: WebSocketConnectionState = .disconnected
 
     // MARK: - WebSocketServiceProtocol
 
     /// Each call returns an independent `AsyncStream` so multiple observers
-    /// (e.g., different Repositories) can each iterate their own sequence.
+    /// (e.g. different Repositories) can each iterate their own sequence.
     var eventStream: AsyncStream<WebSocketEvent> {
         AsyncStream { continuation in
             let id = UUID()
@@ -44,13 +46,21 @@ final class LiveWebSocketService: NSObject, WebSocketServiceProtocol, @unchecked
         }
     }
 
-    /// Yields the current state immediately, then all subsequent state changes.
+    /// Yields the current state immediately (cold-observable semantics matching
+    /// `CurrentValueSubject`), then all subsequent state changes.
+    ///
+    /// The state snapshot and the continuation registration are performed atomically
+    /// under `lock`, preventing a race where a transition fires between the two.
     var connectionStateStream: AsyncStream<WebSocketConnectionState> {
-        let current = _currentState
-        return AsyncStream { continuation in
+        AsyncStream { continuation in
             let id = UUID()
-            continuation.yield(current)                          // cold-observable: emit current first
-            lock.withLock { stateContinuations[id] = continuation }
+            // Atomic: register continuation AND read current state in the same lock region
+            // so no state transition can slip between the two operations.
+            let current: WebSocketConnectionState = lock.withLock {
+                stateContinuations[id] = continuation
+                return _currentState
+            }
+            continuation.yield(current)         // emit OUTSIDE lock — no deadlock risk
             continuation.onTermination = { [weak self] _ in
                 self?.lock.withLock { self?.stateContinuations.removeValue(forKey: id) }
             }
@@ -58,9 +68,11 @@ final class LiveWebSocketService: NSObject, WebSocketServiceProtocol, @unchecked
     }
 
     /// Synchronous snapshot — for initial ViewModel binding before the async loop starts.
-    var currentState: WebSocketConnectionState { _currentState }
+    var currentState: WebSocketConnectionState {
+        lock.withLock { _currentState }
+    }
 
-    // MARK: - Internal State
+    // MARK: - Internal State (delegate-queue serialised)
 
     private var webSocketTask: URLSessionWebSocketTask?
     private var activeURL: URL?
@@ -68,7 +80,6 @@ final class LiveWebSocketService: NSObject, WebSocketServiceProtocol, @unchecked
     private var reconnectTask: Task<Void, Never>?
     private var reconnectAttempts = 0
     private let maxReconnectAttempts = 5
-    private var _currentState: WebSocketConnectionState = .disconnected
 
     private lazy var urlSession: URLSession = {
         let config = URLSessionConfiguration.default
@@ -79,7 +90,7 @@ final class LiveWebSocketService: NSObject, WebSocketServiceProtocol, @unchecked
     // MARK: - Connection Lifecycle
 
     func connect(to url: URL) {
-        guard _currentState == .disconnected else {
+        guard currentState == .disconnected else {
             AppLog.debug("WS: Already connected or connecting — ignoring connect(to:)", category: .network)
             return
         }
@@ -226,19 +237,21 @@ final class LiveWebSocketService: NSObject, WebSocketServiceProtocol, @unchecked
 
     // MARK: - Emission Helpers
 
-    /// Delivers an event to every active continuation.
+    /// Delivers an event to every active continuation. Emission is done OUTSIDE
+    /// the lock to avoid any potential deadlock with the termination handler.
     private func emit(_ event: WebSocketEvent) {
-        lock.withLock {
-            eventContinuations.values.forEach { $0.yield(event) }
-        }
+        let continuations = lock.withLock { Array(eventContinuations.values) }
+        continuations.forEach { $0.yield(event) }
     }
 
-    /// Updates local state snapshot and delivers the new state to every continuation.
+    /// Updates the state snapshot (under lock) and delivers the new state to all
+    /// active continuations (outside the lock).
     private func updateState(_ state: WebSocketConnectionState) {
-        _currentState = state
-        lock.withLock {
-            stateContinuations.values.forEach { $0.yield(state) }
+        let continuations: [AsyncStream<WebSocketConnectionState>.Continuation] = lock.withLock {
+            _currentState = state
+            return Array(stateContinuations.values)
         }
+        continuations.forEach { $0.yield(state) }
     }
 }
 

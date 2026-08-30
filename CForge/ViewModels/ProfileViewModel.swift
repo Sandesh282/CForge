@@ -36,7 +36,13 @@ final class ProfileViewModel: ObservableObject {
     // MARK: - Dependencies
 
     private let repository: ProfileRepository
+    /// Long-lived observation tasks. Cancelled in `deinit` — the direct equivalent of
+    /// `Set<AnyCancellable>` auto-cancellation when the ViewModel deallocates.
     private var observationTasks: [Task<Void, Never>] = []
+
+    deinit {
+        observationTasks.forEach { $0.cancel() }
+    }
 
     // MARK: - Init
 
@@ -105,9 +111,12 @@ final class ProfileViewModel: ObservableObject {
 
     private func bindRepositoryPublishers() {
         // Live rating update from WebSocket
+        // Weak capture only inside the loop body — promoting `self` via guard let outside
+        // the loop creates a strong reference across suspensions and prevents deallocation.
         observationTasks.append(Task { [weak self] in
-            guard let self else { return }
-            for await (_, newRating) in await repository.ratingUpdated {
+            guard let stream = await self?.repository.ratingUpdated else { return }
+            for await (_, newRating) in stream {
+                guard let self else { break }
                 await MainActor.run {
                     withAnimation(.easeOut(duration: 0.5)) {
                         self.liveRating = newRating
@@ -118,16 +127,18 @@ final class ProfileViewModel: ObservableObject {
 
         // WebSocket connection state
         observationTasks.append(Task { [weak self] in
-            guard let self else { return }
-            for await state in await repository.wsConnectionState {
+            guard let stream = await self?.repository.wsConnectionState else { return }
+            for await state in stream {
+                guard let self else { break }
                 await MainActor.run { self.connectionState = state }
             }
         })
 
         // Staleness tracking — drives StalenessBanner (TTL: 60 min for rating history)
         observationTasks.append(Task { [weak self] in
-            guard let self else { return }
-            for await date in await repository.dataLastUpdated {
+            guard let stream = await self?.repository.dataLastUpdated else { return }
+            for await date in stream {
+                guard let self else { break }
                 await MainActor.run {
                     self.dataLastUpdated = date
                     if let date {

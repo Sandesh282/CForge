@@ -96,6 +96,15 @@ actor ProfileRepository {
 
     private var wsBindingTask: Task<Void, Never>?
 
+    // MARK: - Latest-Wins Rating Throttle State
+    //
+    // Actor isolation guarantees no races on these fields.
+    // Rating updates during live contests can burst at high frequency;
+    // we open a 1-second window and flush the *latest* value on close.
+
+    private var pendingRating: (String, Int)?
+    private var ratingThrottleTask: Task<Void, Never>?
+
     // MARK: - Persistence
 
     private let modelContext: ModelContext
@@ -251,37 +260,48 @@ actor ProfileRepository {
     }
 
     private func bindWebSocketEvents() {
-        wsBindingTask = Task { [weak self, weak wsService] in
-            guard let self, let wsService else { return }
+        wsBindingTask = Task { [weak self] in
+            guard let wsService = await self?.wsService else { return }
 
             // Fan-out: two concurrent child tasks — one for events, one for state changes.
             await withTaskGroup(of: Void.self) { group in
 
-                // Rating update events — throttled to ≤ 1 per second to prevent
-                // excessive ProfileView re-renders during burst updates in live contests.
-                group.addTask { [weak self, weak wsService] in
-                    guard let wsService else { return }
-                    var lastEmit: Date = .distantPast
+                // Rating update events — latest-wins throttle at 1 s.
+                // Every event in the window updates the pending slot; the window-close
+                // flush delivers the *latest* rating, matching .throttle(latest: true).
+                group.addTask { [weak self] in
                     for await event in wsService.eventStream {
                         guard case .ratingUpdate(let handle, let rating) = event else { continue }
-                        // Manual throttle: skip events within 1 s of the last emission
-                        let now = Date()
-                        guard now.timeIntervalSince(lastEmit) >= 1.0 else { continue }
-                        lastEmit = now
-                        await self?.persistRatingUpdate(handle: handle, newRating: rating)
-                        await self?.invalidateProfileCache()
-                        await self?.emitRating((handle, rating))
+                        await self?.scheduleRatingEmission((handle, rating))
                     }
                 }
 
-                group.addTask { [weak self, weak wsService] in
-                    guard let wsService else { return }
+                group.addTask { [weak self] in
                     for await state in wsService.connectionStateStream {
                         await self?.emitState(state)
                     }
                 }
             }
         }
+    }
+
+    /// Records the latest rating pair and opens a 1 s flush window if none is open.
+    private func scheduleRatingEmission(_ value: (String, Int)) {
+        pendingRating = value
+        guard ratingThrottleTask == nil else { return }  // window already open
+        ratingThrottleTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 1_000_000_000)  // 1 s window
+            await self?.flushPendingRating()
+        }
+    }
+
+    private func flushPendingRating() {
+        ratingThrottleTask = nil
+        guard let (handle, rating) = pendingRating else { return }
+        pendingRating = nil
+        persistRatingUpdate(handle: handle, newRating: rating)
+        invalidateProfileCache()
+        emitRating((handle, rating))
     }
 
     private func invalidateProfileCache() {
